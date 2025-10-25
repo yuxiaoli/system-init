@@ -462,21 +462,6 @@ ensure_script_executable() {
 # Ensure script is executable for subsequent runs
 ensure_script_executable
 
-# Pre-flight: update the system via detected package manager
-info "Pre-flight: Updating system packages"
-pm_system_update
-
-info "Step 1/3: Installing Python 3.11 + pip"
-install_python311
-
-info "Step 2/3: Installing Git"
-install_git
-
-info "Step 3/3: Installing 1Password"
-install_1password
-
-info "All done. ✅"
-exit 0
 # -----------------------------
 # PM helpers
 # -----------------------------
@@ -582,3 +567,19 @@ pm_install() {
     brew) brew install "$@" ;;
   esac
 }
+
+# Pre-flight: update the system via detected package manager
+info "Pre-flight: Updating system packages"
+pm_system_update
+
+info "Step 1/3: Installing Python 3.11 + pip"
+install_python311
+
+info "Step 2/3: Installing Git"
+install_git
+
+info "Step 3/3: Installing 1Password"
+install_1password
+
+info "All done. ✅"
+exit 0
