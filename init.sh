@@ -457,7 +457,7 @@ install_1password
 
 info "All done. ✅"
 exit 0
-# Ensure script is executable for future runs
+# New: ensure_script_executable (fixes 'command not found' error)
 ensure_script_executable() {
   if [ ! -x "$0" ]; then
     info "Setting executable permission on $0"
@@ -465,11 +465,17 @@ ensure_script_executable() {
       info "Executable permission set."
     else
       if [ -n "$SUDO" ]; then
-        $SUDO chmod +x "$0" 2>/dev/null || warn "Failed to set executable permission via sudo."
+        if $SUDO chmod +x "$0" 2>/dev/null; then
+          info "Executable permission set via sudo."
+        else
+          warn "Failed to set executable permission via sudo."
+        fi
       else
         warn "Failed to set executable permission; run: chmod +x '$0'"
       fi
     fi
+  else
+    info "Script already executable."
   fi
 }
 # -----------------------------
