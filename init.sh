@@ -210,13 +210,23 @@ ensure_pip311() {
 }
 
 # New: set python3 to Python 3.11 as default (idempotent)
-set_python3_default_to_311() {
+# set_python3_default_to_311()
+ensure_pip311() {
+  # Determine target Python 3.11 binary
   target_bin="${PYTHON_BIN:-$(command -v python3.11 || true)}"
   if [ -z "$target_bin" ]; then
-    warn "python3.11 not found; cannot set python3 default."
-    return 0
+    if [ -x /usr/bin/python3.11 ]; then
+      target_bin="/usr/bin/python3.11"
+    elif [ -x /usr/local/bin/python3.11 ]; then
+      target_bin="/usr/local/bin/python3.11"
+    fi
   fi
 
+  if [ -z "$target_bin" ]; then
+    die "$EC_PYTHON" "Python 3.11 not found; cannot set python3 default."
+  fi
+
+  # If python3 already reports 3.11, skip
   current_ver="$(python3 --version 2>/dev/null | awk '{print $2}' || true)"
   if [ -n "$current_ver" ] && [ "${current_ver%%.*}" -eq 3 ] && [ "$(echo "$current_ver" | cut -d. -f2)" -eq 11 ]; then
     info "python3 already points to Python $current_ver"
@@ -224,24 +234,35 @@ set_python3_default_to_311() {
   fi
 
   if command -v update-alternatives >/dev/null 2>&1; then
-    info "Setting python3 via update-alternatives -> $target_bin"
+    # Debian/Ubuntu: ensure alternatives directory exists
+    $SUDO mkdir -p /var/lib/dpkg/alternatives >/dev/null 2>&1 || true
+    info "Configuring update-alternatives for python3 -> $target_bin"
     $SUDO update-alternatives --install /usr/bin/python3 python3 "$target_bin" 1 || true
     $SUDO update-alternatives --set python3 "$target_bin" || true
+    alt_status="$($SUDO update-alternatives --display python3 2>&1 || true)"
+    info "Alternatives status (update-alternatives): ${alt_status}"
   elif command -v alternatives >/dev/null 2>&1; then
-    info "Setting python3 via alternatives -> $target_bin"
+    # RHEL/CentOS/Fedora: ensure alternatives directory exists
+    $SUDO mkdir -p /var/lib/alternatives >/dev/null 2>&1 || true
+    info "Configuring alternatives for python3 -> $target_bin"
     $SUDO alternatives --install /usr/bin/python3 python3 "$target_bin" 1 || true
     $SUDO alternatives --set python3 "$target_bin" || true
+    alt_status="$($SUDO alternatives --display python3 2>&1 || true)"
+    info "Alternatives status (alternatives): ${alt_status}"
   else
-    info "Setting python3 via symlink in /usr/local/bin -> $target_bin"
-    $SUDO install -d /usr/local/bin
-    $SUDO ln -sf "$target_bin" /usr/local/bin/python3
+    # Fallback: create a symlink
+    info "Alternatives not available; creating symlink /usr/local/bin/python3 -> $target_bin"
+    $SUDO install -d /usr/local/bin || true
+    $SUDO ln -sf "$target_bin" /usr/local/bin/python3 || die "$EC_PYTHON" "Failed to symlink python3 to $target_bin"
   fi
 
-  new_ver="$(python3 --version 2>/dev/null | awk '{print $2}' || true)"
+  # Verify result
+  new_bin="$(command -v python3 || true)"
+  new_ver="$([ -n "$new_bin" ] && "$new_bin" --version 2>/dev/null | awk '{print $2}' || echo "")"
   if [ -n "$new_ver" ] && [ "${new_ver%%.*}" -eq 3 ] && [ "$(echo "$new_ver" | cut -d. -f2)" -eq 11 ]; then
-    info "python3 now points to Python $new_ver"
+    info "python3 now reports Python $new_ver"
   else
-    warn "Unable to confirm python3 pointing to Python 3.11; current: ${new_ver:-unknown}"
+    die "$EC_PYTHON" "Failed to set python3 default to 3.11; current version: ${new_ver:-unknown}"
   fi
 }
 
