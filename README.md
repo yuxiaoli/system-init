@@ -7,6 +7,12 @@ curl https://raw.githubusercontent.com/yuxiaoli/system-init/refs/heads/main/init
 ```
 
 Windows
+Powershell
 ```sh
 iex (iwr "https://raw.githubusercontent.com/yuxiaoli/system-init/refs/heads/main/init.bat" -UseBasicParsing).Content
+```
+
+CMD
+```sh
+init.bat --yes
 ```

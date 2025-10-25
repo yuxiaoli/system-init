@@ -46,13 +46,12 @@ PS> pwsh -File .\init.ps1 --yes
 
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-    [Alias('y','yes')]
+    [Alias('y')]
     [switch]$Yes,
 
-    [Alias('h','help')]
+    [Alias('h')]
     [switch]$Help
 )
-
 # Map GNU-style args to PowerShell switches to preserve CLI behavior
 if ($args -contains '--yes') { $Yes = $true }
 if ($args -contains '--help' -or $args -contains '-h') { $Help = $true }
@@ -497,7 +496,7 @@ function python3 { param([Parameter(ValueFromRemainingArguments=\$true)][object[
             Die $EC_1PASSWORD '1Password installation did not produce the desktop executable.'
         }
     }
-}
+
 # Removed stray closing brace and the 'process { ... }' wrapper; continue at script scope
 Write-Log -Level 'INFO' -Message "Log file: $LogFile"
 if (-not (Test-Network)) {
@@ -516,6 +515,5 @@ Install-Git
 Write-Log -Level 'INFO' -Message "Step 3/3: Installing 1Password"
 Install-1Password
 
-Write-Log -Level 'INFO' -Message "All done. ✅"
+Write-Log -Level 'INFO' -Message "All done."
 exit 0
-}
