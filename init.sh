@@ -39,6 +39,28 @@ die() {
   exit "$1"
 }
 
+# Debug helpers and global traps
+DEBUG="${DEBUG:-0}"
+debug() { [ "$DEBUG" = "1" ] && log "DEBUG $*"; }
+
+if [ "$DEBUG" = "1" ]; then
+  info "DEBUG enabled; verbose execution will be shown."
+  set -x
+fi
+
+# Trap exit to log success or failure
+trap '
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    error "Script failed with exit code $rc"
+  else
+    info "Script completed successfully."
+  fi
+' EXIT
+
+# Additional signal traps for better diagnostics
+trap 'error "Interrupted (SIGINT)"; exit 130' INT
+trap 'error "Terminated (SIGTERM)"; exit 143' TERM
 # -----------------------------
 # Usage
 # -----------------------------
@@ -208,10 +230,9 @@ ensure_pip311() {
 
   die "$EC_PIP" "Failed to install pip for Python 3.11."
 }
-
 # New: set python3 to Python 3.11 as default (idempotent)
 # set_python3_default_to_311()
-ensure_pip311() {
+set_python3_default_to_311() {
     target_bin="${PYTHON_BIN:-python3.11}"
     abs_target="$(command -v "$target_bin" 2>/dev/null || true)"
     if [ -z "$abs_target" ]; then
@@ -221,15 +242,15 @@ ensure_pip311() {
       warn "python3.11 binary not found; cannot set python3 default."
       return 0
     fi
-  
+
     current_ver="$(python3 --version 2>/dev/null | awk '{print $2}' || true)"
     if [ -n "$current_ver" ] && [ "${current_ver%%.*}" -eq 3 ] && [ "$(echo "$current_ver" | cut -d. -f2)" -eq 11 ]; then
       info "python3 already points to Python $current_ver"
       return 0
     fi
-  
+
     configured=0
-  
+
     if command -v update-alternatives >/dev/null 2>&1; then
       info "Setting python3 via update-alternatives -> $abs_target"
       set +e
@@ -244,7 +265,7 @@ ensure_pip311() {
         warn "update-alternatives failed (install rc=$rc1, set rc=$rc2); will try alternatives or symlink."
       fi
     fi
-  
+
     if [ $configured -eq 0 ] && command -v alternatives >/dev/null 2>&1; then
       info "Setting python3 via alternatives -> $abs_target"
       set +e
@@ -259,7 +280,7 @@ ensure_pip311() {
         warn "alternatives failed (install rc=$rc1, set rc=$rc2); will use symlink fallback."
       fi
     fi
-  
+
     if [ $configured -eq 0 ]; then
       # Fallback: symlink to ensure `python3` resolves to 3.11
       if printf "%s" "$PATH" | tr ':' '\n' | grep -q "^/usr/local/bin$"; then
@@ -271,7 +292,7 @@ ensure_pip311() {
         $SUDO ln -sf "$abs_target" /usr/bin/python3
       fi
     fi
-  
+
     new_ver="$(python3 --version 2>/dev/null | awk '{print $2}' || true)"
     new_path="$(command -v python3 2>/dev/null || true)"
     if [ -n "$new_ver" ] && [ "${new_ver%%.*}" -eq 3 ] && [ "$(echo "$new_ver" | cut -d. -f2)" -eq 11 ]; then
@@ -472,6 +493,44 @@ install_1password() {
   info "1Password installed successfully."
 }
 
+# Verify completion: check Python 3.11, pip, Git, and 1Password
+verify_completion() {
+  info "Verifying final installation state..."
+  # Python 3.11
+  py_ver="$(python3 --version 2>/dev/null | awk '{print $2}' || true)"
+  if [ -z "$py_ver" ]; then
+    error "python3 not found on PATH."
+    return 1
+  fi
+  if [ "${py_ver%%.*}" -ne 3 ] || [ "$(echo "$py_ver" | cut -d. -f2)" -ne 11 ]; then
+    error "python3 version check failed: got $py_ver, expected 3.11.x"
+    return 1
+  fi
+  info "python3 version OK: $py_ver"
+
+  # pip for 3.11
+  if ! "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; then
+    error "pip for Python 3.11 not available."
+    return 1
+  fi
+  info "pip for Python 3.11 OK."
+
+  # Git
+  if ! command -v git >/dev/null 2>&1; then
+    error "git not found after installation."
+    return 1
+  fi
+  info "git OK: $(git --version)"
+
+  # 1Password
+  if ! command -v 1password >/dev/null 2>&1; then
+    error "1password CLI not found after installation."
+    return 1
+  fi
+  info "1Password OK."
+  info "Verification complete."
+}
+
 # Main
 info "Log file: $LOG_FILE"
 
@@ -616,6 +675,9 @@ install_git
 
 info "Step 3/3: Installing 1Password"
 install_1password
+
+# Final verification
+verify_completion
 
 info "All done. ✅"
 exit 0
