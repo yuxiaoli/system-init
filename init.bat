@@ -12,6 +12,8 @@ rem - No need for sudo; admin may be required for installs.
 rem - Logging and exit codes mirror the original shell script.
 rem - Maintains --yes/-y and --help semantics; NON_INTERACTIVE=1 respected.
 rem - Idempotent checks use PM-specific list commands and version checks.
+rem - Optional package update control: --update (/U) to enable, --no-update (/NU) to skip.
+rem   Default remains enabled for backward compatibility.
 rem ============================================================
 
 rem -----------------------------
@@ -22,6 +24,8 @@ set "SCRIPT_DIR=%~dp0"
 if not defined LOG_FILE set "LOG_FILE=%SCRIPT_DIR%system-init.log"
 set "ASSUME_YES=0"
 if /I "%NON_INTERACTIVE%"=="1" set "ASSUME_YES=1"
+rem Optional package update flag (default ON for backward compatibility)
+if not defined UPDATE_PKGS set "UPDATE_PKGS=1"
 
 rem Exit codes
 set "EC_UNSUPPORTED=10"
@@ -78,6 +82,8 @@ echo.
 echo Options:
 echo   -y, --yes        Non-interactive mode (assume yes)
 echo   -h, --help       Show this help
+echo   --update, /U     Run pre-flight package upgrade (default: enabled)
+echo   --no-update, /NU Skip pre-flight package upgrade
 echo.
 echo Behavior:
 echo   - Detects supported package manager: winget, choco, scoop
@@ -103,10 +109,14 @@ rem Arg parsing
 rem -----------------------------
 :parse_args
 if "%~1"=="" goto after_parse_args
-if /I "%~1"=="-y"      set "ASSUME_YES=1" & shift & goto parse_args
-if /I "%~1"=="--yes"   set "ASSUME_YES=1" & shift & goto parse_args
-if /I "%~1"=="-h"      call :usage & exit /b 0
-if /I "%~1"=="--help"  call :usage & exit /b 0
+if /I "%~1"=="-y"        set "ASSUME_YES=1" & shift & goto parse_args
+if /I "%~1"=="--yes"     set "ASSUME_YES=1" & shift & goto parse_args
+if /I "%~1"=="--update"  set "UPDATE_PKGS=1" & shift & goto parse_args
+if /I "%~1"=="/U"        set "UPDATE_PKGS=1" & shift & goto parse_args
+if /I "%~1"=="--no-update" set "UPDATE_PKGS=0" & shift & goto parse_args
+if /I "%~1"=="/NU"       set "UPDATE_PKGS=0" & shift & goto parse_args
+if /I "%~1"=="-h"        call :usage & exit /b 0
+if /I "%~1"=="--help"    call :usage & exit /b 0
 call :warn Unknown option: %~1
 call :usage
 exit /b 1
@@ -383,7 +393,21 @@ call :info Script executable permissions not required on Windows.
 
 rem Pre-flight: update the system via detected package manager
 call :info Pre-flight: Updating system packages
-call :pm_system_update
+rem Optional package update control:
+rem - Enabled by default for backward compatibility.
+rem - Can be forced with --update (/U) or disabled with --no-update (/NU).
+if "%UPDATE_PKGS%"=="1" (
+  call :info Update flag ON; running package upgrade via '%PM%'.
+  call :pm_system_update
+  rem pm_system_update populates RC; perform additional error-aware logging here.
+  if not "%RC%"=="0" (
+    call :warn Package update encountered errors (rc=%RC%). Continuing installation.
+  ) else (
+    call :info Package update completed successfully.
+  )
+) else (
+  call :info Update flag OFF; skipping pre-flight package upgrade.
+)
 
 call :info Step 1/3: Installing Python 3.11 + pip
 call :install_python311
