@@ -436,10 +436,15 @@ install_1password() {
   info "1Password installed successfully."
 }
 
-# -----------------------------
 # Main
-# -----------------------------
 info "Log file: $LOG_FILE"
+
+# Ensure script is executable for subsequent runs
+ensure_script_executable
+
+# Pre-flight: update the system via detected package manager
+info "Pre-flight: Updating system packages"
+pm_system_update
 
 info "Step 1/3: Installing Python 3.11 + pip"
 install_python311
@@ -452,3 +457,123 @@ install_1password
 
 info "All done. ✅"
 exit 0
+# Ensure script is executable for future runs
+ensure_script_executable() {
+  if [ ! -x "$0" ]; then
+    info "Setting executable permission on $0"
+    if chmod +x "$0" 2>/dev/null; then
+      info "Executable permission set."
+    else
+      if [ -n "$SUDO" ]; then
+        $SUDO chmod +x "$0" 2>/dev/null || warn "Failed to set executable permission via sudo."
+      else
+        warn "Failed to set executable permission; run: chmod +x '$0'"
+      fi
+    fi
+  fi
+}
+# -----------------------------
+# PM helpers
+# -----------------------------
+# PM helpers
+pm_update() {
+  info "Updating package index..."
+  case "$PM" in
+    apt) $SUDO apt-get update $YES_FLAG ;;
+    dnf) $SUDO dnf -y makecache ;;
+    yum) $SUDO yum -y makecache ;;
+    zypper) $SUDO zypper -n refresh ;;
+    pacman) $SUDO pacman -Sy $YES_FLAG ;;
+    apk) $SUDO apk update ;;
+    brew) brew update ;;
+  esac
+}
+
+# New: Run full system update based on detected package manager
+pm_system_update() {
+  info "Running system package update via '$PM'..."
+  rc=0
+  case "$PM" in
+    apt)
+      set +e
+      $SUDO apt-get update $YES_FLAG
+      rc=$?
+      # If non-interactive, also upgrade packages
+      if [ $rc -eq 0 ] && [ "$ASSUME_YES" = "1" ]; then
+        $SUDO apt-get upgrade -y
+        rc=$?
+      fi
+      set -e
+      ;;
+    yum)
+      set +e
+      $SUDO yum update -y
+      rc=$?
+      set -e
+      ;;
+    dnf)
+      set +e
+      $SUDO dnf update -y
+      rc=$?
+      set -e
+      ;;
+    zypper)
+      set +e
+      $SUDO zypper -n refresh
+      rc=$?
+      if [ $rc -eq 0 ]; then
+        $SUDO zypper -n update
+        rc=$?
+      fi
+      set -e
+      ;;
+    pacman)
+      set +e
+      $SUDO pacman -Syu $YES_FLAG
+      rc=$?
+      set -e
+      ;;
+    apk)
+      set +e
+      $SUDO apk update
+      rc=$?
+      if [ $rc -eq 0 ]; then
+        $SUDO apk upgrade
+        rc=$?
+      fi
+      set -e
+      ;;
+    brew)
+      set +e
+      brew update
+      rc=$?
+      if [ $rc -eq 0 ]; then
+        brew upgrade
+        rc=$?
+      fi
+      set -e
+      ;;
+    *)
+      die "$EC_UNSUPPORTED" "No supported package manager found for system update."
+      ;;
+  esac
+
+  if [ $rc -ne 0 ]; then
+    error "System update failed via '$PM' (exit $rc)."
+  else
+    info "System update via '$PM' completed successfully."
+  fi
+}
+
+pm_install() {
+  # Installs passed packages, idempotently where possible
+  case "$PM" in
+    apt) $SUDO apt-get install $YES_FLAG "$@" ;;
+    dnf) $SUDO dnf install -y "$@" ;;
+    yum) $SUDO yum install -y "$@" ;;
+    zypper) $SUDO zypper -n install "$@" ;;
+    pacman) $SUDO pacman -S --needed $YES_FLAG "$@" ;;
+    apk) $SUDO apk add "$@" ;;
+    brew) brew install "$@" ;;
+  esac
+}
