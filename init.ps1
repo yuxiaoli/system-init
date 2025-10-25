@@ -53,29 +53,28 @@ param(
     [switch]$Help
 )
 
-begin {
-    # Map GNU-style args to PowerShell switches to preserve CLI behavior
-    if ($args -contains '--yes') { $Yes = $true }
-    if ($args -contains '--help' -or $args -contains '-h') { $Help = $true }
+# Map GNU-style args to PowerShell switches to preserve CLI behavior
+if ($args -contains '--yes') { $Yes = $true }
+if ($args -contains '--help' -or $args -contains '-h') { $Help = $true }
 
-    if ($Help) {
-        Get-Help -Detailed
-        exit 0
-    }
+if ($Help) {
+    Get-Help -Detailed
+    exit 0
+}
 
-    $ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Stop'
 
-    # Exit codes (mirroring init.sh)
-    $EC_UNSUPPORTED = 10
-    $EC_PYTHON      = 20
-    $EC_PIP         = 21
-    $EC_GIT         = 30
-    $EC_1PASSWORD   = 40
+# Exit codes (mirroring init.sh)
+$EC_UNSUPPORTED = 10
+$EC_PYTHON      = 20
+$EC_PIP         = 21
+$EC_GIT         = 30
+$EC_1PASSWORD   = 40
 
-    # Script context
-    $ScriptName = Split-Path -Leaf $PSCommandPath
-    $ScriptDir  = Split-Path -Parent $PSCommandPath
-    $LogFile    = Join-Path $ScriptDir 'system-init.log'
+# Script context
+$ScriptName = Split-Path -Leaf $PSCommandPath
+$ScriptDir  = Split-Path -Parent $PSCommandPath
+$LogFile    = Join-Path $ScriptDir 'system-init.log'
 
     # Helpers
     function Get-Timestamp { Get-Date -Format 'yyyy-MM-dd HH:mm:ss' }
@@ -501,6 +500,7 @@ function python3 { param([Parameter(ValueFromRemainingArguments=\$true)][object[
 }
 
 process {
+    # (Removed the closing brace of 'begin' and the opening 'process {'; code continues at script scope)
     Write-Log -Level 'INFO' -Message "Log file: $LogFile"
     if (-not (Test-Network)) {
         Write-Log -Level 'WARN' -Message "Network check failed or web requests blocked. Proceeding; downloads may fail."
