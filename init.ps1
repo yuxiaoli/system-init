@@ -175,7 +175,7 @@ $LogFile    = Join-Path $ScriptDir 'system-init.log'
                 Write-Log -Level 'INFO' -Message "Installing $DisplayName via winget id '$id'..."
                 $extra = @()
                 if ($Yes) { $extra += @('--accept-package-agreements','--accept-source-agreements','--silent') }
-                winget install -e --id $id @extra | Out-Null
+                winget install -e --id $id $extra | Out-Null
                 return $true
             } catch {
                 Write-Log -Level 'WARN' -Message "winget id '$id' not available or install failed: $($_.Exception.Message)"
@@ -353,9 +353,9 @@ $LogFile    = Join-Path $ScriptDir 'system-init.log'
             }
             $profileContent = Get-Content -Path $profilePath -ErrorAction SilentlyContinue
             if (-not ($profileContent -join "`n" -match 'function\s+python3')) {
-                Add-Content -Path $profilePath -Value @"
-function python3 { param([Parameter(ValueFromRemainingArguments=\$true)][object[]]\$Args) py -3.11 \$Args }
-"@
+                Add-Content -Path $profilePath -Value @'
+function python3 { param([Parameter(ValueFromRemainingArguments=$true)][object[]]$Args) py -3.11 $Args }
+'@
                 Write-Log -Level 'INFO' -Message "Added 'python3' function to PowerShell profile: $profilePath"
             } else {
                 Write-Log -Level 'INFO' -Message "PowerShell profile already contains a 'python3' function."
@@ -441,15 +441,15 @@ function python3 { param([Parameter(ValueFromRemainingArguments=\$true)][object[
         # Broadcast environment change to other processes (new sessions pick it up)
         try {
             Add-Type -TypeDefinition @"
-    using System;
-    using System.Runtime.InteropServices;
-    public static class NativeMethods {
-      public const int HWND_BROADCAST = 0xffff;
-      public const int WM_SETTINGCHANGE = 0x001A;
-      [DllImport("user32.dll", SetLastError=true, CharSet=CharSet.Auto)]
-      public static extern IntPtr SendMessageTimeout(IntPtr hWnd, int Msg, IntPtr wParam, string lParam, int fuFlags, int uTimeout, out IntPtr lpdwResult);
-    }
-    "@ -ErrorAction SilentlyContinue | Out-Null
+using System;
+using System.Runtime.InteropServices;
+public static class NativeMethods {
+  public const int HWND_BROADCAST = 0xffff;
+  public const int WM_SETTINGCHANGE = 0x001A;
+  [DllImport("user32.dll", SetLastError=true, CharSet=CharSet.Auto)]
+  public static extern IntPtr SendMessageTimeout(IntPtr hWnd, int Msg, IntPtr wParam, string lParam, int fuFlags, int uTimeout, out IntPtr lpdwResult);
+}
+"@ -ErrorAction SilentlyContinue | Out-Null
             [NativeMethods]::SendMessageTimeout([IntPtr]0xffff, 0x001A, [IntPtr]::Zero, 'Environment', 0, 1000, [ref][IntPtr]::Zero) | Out-Null
         } catch { }
     }
