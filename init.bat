@@ -1,5 +1,6 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
+goto :main
 
 rem ============================================================
 rem init.bat - Install Python 3.11 (with pip), Git, and 1Password on Windows
@@ -335,44 +336,6 @@ exit /b 0
 rem -----------------------------
 rem 1Password (official)
 rem -----------------------------
-:install_1password_winget
-rem Idempotency via winget list
-set "FOUND=0"
-for /f "tokens=*" %%L in ('winget list --id AgileBits.1Password 2^>nul ^| findstr /I "AgileBits.1Password"') do set "FOUND=1"
-if "%FOUND%"=="1" (
-  call :info 1Password already installed (winget).
-  exit /b 0
-)
-call :info Installing 1Password via winget...
-winget install -e --id AgileBits.1Password %WINGET_YES%
-if not %ERRORLEVEL% EQU 0 call :die %EC_1PASSWORD% "1Password installation via winget failed."
-exit /b 0
-
-:install_1password_choco
-rem Idempotency via choco local list
-for /f "tokens=*" %%L in ('choco list --local-only 1password ^| findstr /I "^1password"') do set "FOUND=1"
-if /I "%FOUND%"=="1" (
-  call :info 1Password already installed (choco).
-  exit /b 0
-)
-call :info Installing 1Password via choco...
-choco install 1password %CHOCO_YES%
-if not %ERRORLEVEL% EQU 0 call :die %EC_1PASSWORD% "1Password installation via choco failed."
-exit /b 0
-
-:install_1password_scoop
-rem 1Password often in extras bucket
-scoop bucket add extras >nul 2>&1
-for /f "tokens=*" %%L in ('scoop list 1password 2^>nul') do set "FOUND=1"
-if /I "%FOUND%"=="1" (
-  call :info 1Password already installed (scoop).
-  exit /b 0
-)
-call :info Installing 1Password via scoop...
-scoop install 1password
-if not %ERRORLEVEL% EQU 0 call :die %EC_1PASSWORD% "1Password installation via scoop failed."
-exit /b 0
-
 :install_1password
 call :info Installing 1Password (official)...
 if /I "%PM%"=="winget" (
@@ -397,9 +360,22 @@ if /I "%PM%"=="winget" (
 call :info 1Password installed successfully.
 exit /b 0
 
-rem -----------------------------
-rem Main
-rem -----------------------------
+:main
+call :parse_args %*
+call :is_admin
+
+set "OSNAME=%OS%"
+call :info Detected OS: %OSNAME%
+
+call :detect_pm
+
+rem YES flag mapping per PM
+set "WINGET_YES="
+if "%ASSUME_YES%"=="1" set "WINGET_YES=--accept-source-agreements --accept-package-agreements"
+set "CHOCO_YES="
+if "%ASSUME_YES%"=="1" set "CHOCO_YES=-y"
+set "SCOOP_FLAGS="
+
 call :info Log file: %LOG_FILE%
 
 rem Executable bit is not applicable on Windows; acknowledge parity with Linux script.
