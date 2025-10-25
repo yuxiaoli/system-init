@@ -1,5 +1,17 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
+
+rem -----------------------------
+rem Config and defaults (must run before :main)
+rem -----------------------------
+set "SCRIPT_NAME=%~nx0"
+set "SCRIPT_DIR=%~dp0"
+if not defined LOG_FILE set "LOG_FILE=%SCRIPT_DIR%system-init.log"
+set "ASSUME_YES=0"
+if /I "%NON_INTERACTIVE%"=="1" set "ASSUME_YES=1"
+rem Optional package update flag (default ON for backward compatibility)
+if not defined UPDATE_PKGS set "UPDATE_PKGS=1"
+
 goto :main
 
 rem ============================================================
@@ -44,25 +56,29 @@ rem -----------------------------
 set "TS=%DATE% %TIME%"
 exit /b 0
 
+rem Logging helpers
 :log
 set "LEVEL=%~1"
-shift
-set "MSG=%*"
+set "MSG=%~2"
 call :ts
+rem Ensure log destination path exists; fallback if undefined
+if not defined LOG_FILE set "LOG_FILE=%SCRIPT_DIR%system-init.log"
+for %%I in ("%LOG_FILE%") do set "LOG_DIR=%%~dpI"
+if not exist "!LOG_DIR!" mkdir "!LOG_DIR!" >nul 2>&1
 echo %TS% %LEVEL% %MSG%
 >>"%LOG_FILE%" echo %TS% %LEVEL% %MSG%
 exit /b 0
 
 :info
-call :log "INFO " %*
+call :log INFO "%*"
 exit /b 0
 
 :warn
-call :log "WARN " %*
+call :log WARN "%*"
 exit /b 0
 
 :error
-call :log "ERROR" %*
+call :log ERROR "%*"
 exit /b 0
 
 :die
@@ -136,6 +152,7 @@ if %ERRORLEVEL% EQU 0 (
   call :info Not running as admin; some installs may prompt for elevation.
 )
 rem No auto-elevation; we proceed and let PM prompt as needed.
+exit /b 0
 
 rem -----------------------------
 rem OS and PM detection
@@ -143,6 +160,7 @@ rem -----------------------------
 set "OSNAME=%OS%"
 call :info Detected OS: %OSNAME%
 
+rem OS and PM detection
 :detect_pm
 set "PM=none"
 
@@ -163,6 +181,7 @@ call :info Detected package manager: %PM%
 if /I "%PM%"=="none" (
   call :die %EC_UNSUPPORTED% "No supported package manager found (winget/choco/scoop)."
 )
+exit /b 0
 
 rem YES flag mapping per PM
 set "WINGET_YES="
@@ -203,6 +222,7 @@ if not "%RC%"=="0" (
 ) else (
   call :info System update via '%PM%' completed successfully.
 )
+exit /b %RC%
 exit /b 0
 
 rem -----------------------------
@@ -219,7 +239,7 @@ if %ERRORLEVEL% EQU 0 (
 call :info Bootstrapping pip for Python 3.11...
 %PYTHON_BIN% -m ensurepip --upgrade >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
-  call :info pip (ensurepip) installed for Python 3.11.
+  call :info pip installed via ensurepip for Python 3.11.
   exit /b 0
 )
 
@@ -235,7 +255,7 @@ if %ERRORLEVEL% EQU 0 (
 if exist "%GETPIP%" (
   %PYTHON_BIN% "%GETPIP%" >nul 2>&1
   if %ERRORLEVEL% EQU 0 (
-    call :info pip (get-pip.py) installed for Python 3.11.
+    call :info pip installed via get-pip.py for Python 3.11.
     del /Q "%GETPIP%" >nul 2>&1
     exit /b 0
   )
@@ -245,43 +265,26 @@ call :die %EC_PIP% "Failed to install pip for Python 3.11."
 
 :install_python311
 rem Check if Python 3.11 is available via py launcher or python.exe
-rem Windows adaptation: prefer py launcher to target 3.11
 py -0p 2>nul | findstr /R /C:"3\.11" >nul 2>&1
-if %ERRORLEVEL% EQU 0 (
-  call :info Python 3.11 already installed: 
-  %PYTHON_BIN% --version 2>nul
-  call :ensure_pip311
-  exit /b 0
-)
+if %ERRORLEVEL% EQU 0 goto python311_found_via_py
 
-rem If python.exe is 3.11, accept it as installed
 for /f "tokens=2" %%V in ('python --version 2^>^&1') do set "PYVER=%%V"
 echo %PYVER% | findstr /R /C:"^3\.11\." >nul 2>&1
-if %ERRORLEVEL% EQU 0 (
-  set "PYTHON_BIN=python"
-  set "PIP_BIN=python -m pip"
-  call :info Python 3.11 already installed: 
-  %PYTHON_BIN% --version
-  call :ensure_pip311
-  exit /b 0
-)
+if %ERRORLEVEL% EQU 0 goto python311_found_via_python
 
 call :info Installing Python 3.11...
 call :pm_update
 
 if /I "%PM%"=="winget" (
-  rem Winget package id for Python 3.11 (Windows Store manifest)
   winget install -e --id Python.Python.3.11 %WINGET_YES%
   if not %ERRORLEVEL% EQU 0 call :die %EC_PYTHON% "Python 3.11 not available via winget on this system."
 ) else if /I "%PM%"=="choco" (
-  rem Try to install a Python package pinned to 3.11 if available; fallback to python and verify version.
   choco install python --version=3.11.9 %CHOCO_YES%
   if not %ERRORLEVEL% EQU 0 (
     choco install python %CHOCO_YES%
     if not %ERRORLEVEL% EQU 0 call :die %EC_PYTHON% "python package not available via choco on this system."
   )
 ) else if /I "%PM%"=="scoop" (
-  rem Scoop versions bucket often hosts python311 explicitly
   scoop bucket add versions >nul 2>&1
   scoop install python311
   if not %ERRORLEVEL% EQU 0 (
@@ -292,6 +295,7 @@ if /I "%PM%"=="winget" (
   call :die %EC_UNSUPPORTED% "Unsupported package manager for Python installation."
 )
 
+:post_python_install
 rem Validate Python 3.11 presence post-install
 py -0p 2>nul | findstr /R /C:"3\.11" >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
@@ -308,13 +312,23 @@ if %ERRORLEVEL% EQU 0 (
   )
 )
 
-call :info Installed: 
+call :info Installed:
 %PYTHON_BIN% --version
 call :ensure_pip311
+exit /b 0
 
-rem Note: Linux script sets python3 default to 3.11 via alternatives.
-rem Windows adaptation: we rely on 'py -3.11' or 'python' reporting 3.11; no python3 alias set.
+:python311_found_via_py
+call :info Python 3.11 already installed:
+%PYTHON_BIN% --version 2>nul
+call :ensure_pip311
+exit /b 0
 
+:python311_found_via_python
+set "PYTHON_BIN=python"
+set "PIP_BIN=python -m pip"
+call :info Python 3.11 already installed:
+%PYTHON_BIN% --version
+call :ensure_pip311
 exit /b 0
 
 rem -----------------------------
@@ -347,7 +361,7 @@ rem -----------------------------
 rem 1Password (official)
 rem -----------------------------
 :install_1password
-call :info Installing 1Password (official)...
+call :info Installing 1Password - official package...
 if /I "%PM%"=="winget" (
   call :install_1password_winget
 ) else if /I "%PM%"=="choco" (
@@ -397,11 +411,10 @@ rem Optional package update control:
 rem - Enabled by default for backward compatibility.
 rem - Can be forced with --update (/U) or disabled with --no-update (/NU).
 if "%UPDATE_PKGS%"=="1" (
-  call :info Update flag ON; running package upgrade via '%PM%'.
+  call :info Update flag ON - running package upgrade via %PM%
   call :pm_system_update
-  rem pm_system_update populates RC; perform additional error-aware logging here.
-  if not "%RC%"=="0" (
-    call :warn Package update encountered errors (rc=%RC%). Continuing installation.
+  if errorlevel 1 (
+    call :warn Package update encountered errors; continuing installation.
   ) else (
     call :info Package update completed successfully.
   )
@@ -418,5 +431,5 @@ call :install_git
 call :info Step 3/3: Installing 1Password
 call :install_1password
 
-call :info All done. ✅
+call :info All done.
 exit /b 0

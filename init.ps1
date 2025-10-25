@@ -417,6 +417,43 @@ function python3 { param([Parameter(ValueFromRemainingArguments=\$true)][object[
         Add-Python3Shim -Python311Exe $exe
     }
 
+    function Refresh-Environment {
+        # Use Chocolatey 'refreshenv' if available
+        try {
+            if (Get-Command refreshenv -ErrorAction SilentlyContinue) {
+                refreshenv | Out-Null
+                Write-Log -Level 'INFO' -Message 'Refreshed environment via refreshenv.'
+                return
+            }
+        } catch { }
+    
+        # Rebuild PATH from registry for current session
+        try {
+            $machinePath = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment' -Name Path -ErrorAction SilentlyContinue).Path
+            $userPath    = (Get-ItemProperty -Path 'HKCU:\Environment' -Name Path -ErrorAction SilentlyContinue).Path
+            $combined    = ($machinePath, $userPath) -join ';'
+            if ($combined) { $env:Path = $combined }
+            Write-Log -Level 'INFO' -Message 'Refreshed PATH for current session.'
+        } catch {
+            Write-Log -Level 'WARN' -Message "Failed to refresh PATH: $($_.Exception.Message)"
+        }
+    
+        # Broadcast environment change to other processes (new sessions pick it up)
+        try {
+            Add-Type -TypeDefinition @"
+    using System;
+    using System.Runtime.InteropServices;
+    public static class NativeMethods {
+      public const int HWND_BROADCAST = 0xffff;
+      public const int WM_SETTINGCHANGE = 0x001A;
+      [DllImport("user32.dll", SetLastError=true, CharSet=CharSet.Auto)]
+      public static extern IntPtr SendMessageTimeout(IntPtr hWnd, int Msg, IntPtr wParam, string lParam, int fuFlags, int uTimeout, out IntPtr lpdwResult);
+    }
+    "@ -ErrorAction SilentlyContinue | Out-Null
+            [NativeMethods]::SendMessageTimeout([IntPtr]0xffff, 0x001A, [IntPtr]::Zero, 'Environment', 0, 1000, [ref][IntPtr]::Zero) | Out-Null
+        } catch { }
+    }
+
     function Install-Git {
         if (Get-Command git -ErrorAction SilentlyContinue) {
             Write-Log -Level 'INFO' -Message ("Git already installed: " + (& git --version))
@@ -434,7 +471,50 @@ function python3 { param([Parameter(ValueFromRemainingArguments=\$true)][object[
         if (-not $ok) {
             Die $EC_GIT 'Failed to install Git.'
         }
-        Write-Log -Level 'INFO' -Message ("Git installed: " + (& git --version))
+
+        # Refresh current session environment so PATH changes are picked up
+        Refresh-Environment
+    
+        # Try resolving git from PATH; fall back to common install locations
+        $gitCmd = Get-Command git -ErrorAction SilentlyContinue
+        if ($gitCmd) {
+            Write-Log -Level 'INFO' -Message ("Git installed: " + (& $gitCmd.Source --version))
+            return
+        }
+    
+        $gitExe = Get-GitExe
+        if ($gitExe) {
+            # Prepend containing directory to PATH for this session
+            $gitDir = Split-Path -Parent $gitExe
+            if ($gitDir -and ($env:Path -split ';' | Where-Object { $_.Trim() -eq $gitDir }).Count -eq 0) {
+                $env:Path = "$gitDir;$env:Path"
+                Write-Log -Level 'INFO' -Message "Added '$gitDir' to PATH for current session."
+            }
+            Write-Log -Level 'INFO' -Message ("Git installed: " + (& $gitExe --version))
+        } else {
+            Die $EC_GIT 'Git installation completed, but executable not found in PATH or known locations.'
+        }
+    }
+
+    function Get-GitExe {
+        $candidates = @(
+            "$env:ProgramFiles\Git\cmd\git.exe",
+            "$env:ProgramFiles\Git\bin\git.exe",
+            "$env:ProgramFiles\Git\mingw64\bin\git.exe",
+            "$env:LOCALAPPDATA\Programs\Git\cmd\git.exe",
+            "$env:LOCALAPPDATA\Programs\Git\bin\git.exe",
+            "$env:ProgramData\chocolatey\bin\git.exe",
+            (Join-Path $env:USERPROFILE 'scoop\apps\git\current\bin\git.exe'),
+            (Join-Path $env:USERPROFILE 'scoop\apps\git\current\mingw64\bin\git.exe')
+        )
+        foreach ($p in $candidates) {
+            if ($p -and (Test-Path $p)) { return $p }
+        }
+        try {
+            $cmd = Get-Command git -ErrorAction SilentlyContinue
+            if ($cmd) { return $cmd.Source }
+        } catch { }
+        return $null
     }
 
     function Test-1PasswordInstalled {
