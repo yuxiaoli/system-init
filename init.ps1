@@ -498,26 +498,24 @@ function python3 { param([Parameter(ValueFromRemainingArguments=\$true)][object[
         }
     }
 }
+# Removed stray closing brace and the 'process { ... }' wrapper; continue at script scope
+Write-Log -Level 'INFO' -Message "Log file: $LogFile"
+if (-not (Test-Network)) {
+    Write-Log -Level 'WARN' -Message "Network check failed or web requests blocked. Proceeding; downloads may fail."
+}
 
-process {
-    # (Removed the closing brace of 'begin' and the opening 'process {'; code continues at script scope)
-    Write-Log -Level 'INFO' -Message "Log file: $LogFile"
-    if (-not (Test-Network)) {
-        Write-Log -Level 'WARN' -Message "Network check failed or web requests blocked. Proceeding; downloads may fail."
-    }
+Write-Log -Level 'INFO' -Message "Pre-flight: Updating system packages"
+Update-SystemPackages
 
-    Write-Log -Level 'INFO' -Message "Pre-flight: Updating system packages"
-    Update-SystemPackages
+Write-Log -Level 'INFO' -Message "Step 1/3: Installing Python 3.11 + pip"
+Install-Python311
 
-    Write-Log -Level 'INFO' -Message "Step 1/3: Installing Python 3.11 + pip"
-    Install-Python311
+Write-Log -Level 'INFO' -Message "Step 2/3: Installing Git"
+Install-Git
 
-    Write-Log -Level 'INFO' -Message "Step 2/3: Installing Git"
-    Install-Git
+Write-Log -Level 'INFO' -Message "Step 3/3: Installing 1Password"
+Install-1Password
 
-    Write-Log -Level 'INFO' -Message "Step 3/3: Installing 1Password"
-    Install-1Password
-
-    Write-Log -Level 'INFO' -Message "All done. ✅"
-    exit 0
+Write-Log -Level 'INFO' -Message "All done. ✅"
+exit 0
 }
