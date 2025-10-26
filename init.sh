@@ -657,7 +657,7 @@ install_1password_brew() {
 
 install_1password() {
   # Idempotency checks
-  if command -v 1password >/dev/null 2>&1; then
+  if command -v op >/dev/null 2>&1; then
     info "1Password already installed."
     return 0
   fi
@@ -674,8 +674,8 @@ install_1password() {
     *) die "$EC_UNSUPPORTED" "Unsupported package manager for 1Password." ;;
   esac
 
-  if ! command -v 1password >/dev/null 2>&1; then
-    die "$EC_1PASSWORD" "1Password installation did not produce '1password' executable."
+  if ! command -v op >/dev/null 2>&1; then
+    die "$EC_1PASSWORD" "1Password installation did not produce 'op' executable."
   fi
 
   info "1Password installed successfully."
