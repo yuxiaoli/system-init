@@ -603,8 +603,12 @@ install_1password_dnf() {
   # sudo sh -c 'echo -e "[1password]\nname=1Password Stable Channel\nbaseurl=https://downloads.1password.com/linux/rpm/stable/\$basearch\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=\"https://downloads.1password.com/linux/keys/1password.asc\"" > /etc/yum.repos.d/1password.repo'
   $SUDO sh -c 'echo -e "[1password]\nname=1Password Stable Channel\nbaseurl=https://downloads.1password.com/linux/rpm/stable/\$basearch\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=\"https://downloads.1password.com/linux/keys/1password.asc\"" > /etc/yum.repos.d/1password.repo'
   # sudo dnf install 1password
-  info "Installing 1Password via dnf..."
-  $SUDO dnf install -y 1password
+  # info "Installing 1Password via dnf..."
+  # $SUDO dnf install -y 1password
+  info "Installing 1Password CLI via dnf..."
+  $SUDO dnf check-update -y 1password-cli && $SUDO dnf install -y 1password-cli
+  # TODO: Verify 1Password CLI installation by checking version
+  info "1Password CLI installed: $(op --version)"
 }
 
 install_1password_zypper() {
@@ -868,6 +872,65 @@ install_1password
 
 # Final verification
 verify_completion
+
+# Post-init
+# TODO: Copy SSH private_key.value to ~/.ssh/id_rsa
+# op item get xs3o5lfiqqs55qkeqz5jwji5iy --reveal --vault Service --format json --fields private_key | jq .value
+info "Post-init: Copying SSH private_key.value to ~/.ssh/id_rsa"
+mkdir -p ~/.ssh
+op item get xs3o5lfiqqs55qkeqz5jwji5iy --reveal --vault Service --format json --fields private_key | jq -r .value > ~/.ssh/id_rsa
+chmod 600 ~/.ssh/id_rsa
+
+# Create $WORKSPACE if it doesn't exist (default: ~/workspace)
+WORKSPACE="${WORKSPACE:-$HOME/workspace}"
+if [ ! -d "$WORKSPACE" ]; then
+  info "Post-init: Creating $WORKSPACE directory"
+  mkdir -p "$WORKSPACE"
+fi
+
+# Clone the setup repository (or pull if it already exists)
+info "Post-init: Cloning setup repository to $WORKSPACE/python"
+if [ -d "$WORKSPACE/python/.git" ]; then
+  info "Post-init: Repository exists; pulling latest changes"
+  git -C "$WORKSPACE/python" pull --ff-only
+else
+  git clone git@github.com:yuxiaoli/app-manager.git "$WORKSPACE/python"
+fi
+
+# Run the setup script corresponding to the detected OS using $PYTHON
+# Default PYTHON if not set
+if [ -z "$PYTHON" ]; then
+  if command -v python3 >/dev/null 2>&1; then
+    PYTHON="python3"
+  else
+    PYTHON="python"
+  fi
+fi
+
+# Determine OS if not set and choose script
+if [ -z "$OS" ]; then
+  uname_s="$(uname | tr '[:upper:]' '[:lower:]')"
+  case "$uname_s" in
+    *mingw*|*msys*) OS="windows" ;;
+    *darwin*)       OS="macos" ;;
+    *linux*)        OS="linux" ;;
+    *)              OS="linux" ;;
+  esac
+fi
+
+case "${OS,,}" in
+  windows) setup_script="windows_init.py" ;;
+  macos)   setup_script="macos_init.py" ;;
+  linux)   setup_script="linux_init.py" ;;
+  *)
+    info "Post-init: Unknown OS '$OS'; defaulting to linux_init.py"
+    setup_script="linux_init.py"
+    ;;
+esac
+
+cd "$WORKSPACE/python/scripts" || cd "$WORKSPACE/python" || exit 1
+info "Post-init: Running setup script $setup_script"
+$SUDO "$PYTHON" "$setup_script"
 
 info "All done. ✅"
 exit 0
