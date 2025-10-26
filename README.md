@@ -3,7 +3,7 @@ Universal shell scripts to install minimal prerequisites on various platforms
 
 Linux
 ```sh
-curl https://raw.githubusercontent.com/yuxiaoli/system-init/refs/heads/main/init.sh | sh
+curl https://raw.githubusercontent.com/yuxiaoli/system-init/main/init.sh | sh
 ```
 
 Windows

@@ -711,8 +711,8 @@ verify_completion() {
   info "git OK: $(git --version)"
 
   # 1Password
-  if ! command -v 1password >/dev/null 2>&1; then
-    error "1password CLI not found after installation."
+  if ! command -v op >/dev/null 2>&1; then
+    error "1Password CLI (op) not found after installation."
     return 1
   fi
   info "1Password OK."
