@@ -241,73 +241,75 @@ ensure_pip311() {
 # New: set python3 to Python 3.11 as default (idempotent)
 # set_python3_default_to_311()
 set_python3_default_to_311() {
-    target_bin="${PYTHON_BIN:-python3.11}"
-    abs_target="$(command -v "$target_bin" 2>/dev/null || true)"
-    if [ -z "$abs_target" ]; then
-      abs_target="$(command -v python3.11 2>/dev/null || true)"
-    fi
-    if [ -z "$abs_target" ]; then
-      warn "python3.11 binary not found; cannot set python3 default."
-      return 0
-    fi
+  # Amazon Linux yum relies on the system python3 (3.9)
+  return 0
+  target_bin="${PYTHON_BIN:-python3.11}"
+  abs_target="$(command -v "$target_bin" 2>/dev/null || true)"
+  if [ -z "$abs_target" ]; then
+    abs_target="$(command -v python3.11 2>/dev/null || true)"
+  fi
+  if [ -z "$abs_target" ]; then
+    warn "python3.11 binary not found; cannot set python3 default."
+    return 0
+  fi
 
-    current_ver="$(python3 --version 2>/dev/null | awk '{print $2}' || true)"
-    if [ -n "$current_ver" ] && [ "${current_ver%%.*}" -eq 3 ] && [ "$(echo "$current_ver" | cut -d. -f2)" -eq 11 ]; then
-      info "python3 already points to Python $current_ver"
-      return 0
-    fi
+  current_ver="$(python3 --version 2>/dev/null | awk '{print $2}' || true)"
+  if [ -n "$current_ver" ] && [ "${current_ver%%.*}" -eq 3 ] && [ "$(echo "$current_ver" | cut -d. -f2)" -eq 11 ]; then
+    info "python3 already points to Python $current_ver"
+    return 0
+  fi
 
-    configured=0
+  configured=0
 
-    if command -v update-alternatives >/dev/null 2>&1; then
-      info "Setting python3 via update-alternatives -> $abs_target"
-      set +e
-      $SUDO update-alternatives --install /usr/bin/python3 python3 "$abs_target" 311
-      rc1=$?
-      $SUDO update-alternatives --set python3 "$abs_target"
-      rc2=$?
-      set -e
-      if [ $rc1 -eq 0 ] && [ $rc2 -eq 0 ]; then
-        configured=1
-      else
-        warn "update-alternatives failed (install rc=$rc1, set rc=$rc2); will try alternatives or symlink."
-      fi
-    fi
-
-    if [ $configured -eq 0 ] && command -v alternatives >/dev/null 2>&1; then
-      info "Setting python3 via alternatives -> $abs_target"
-      set +e
-      $SUDO alternatives --install /usr/bin/python3 python3 "$abs_target" 311
-      rc1=$?
-      $SUDO alternatives --set python3 "$abs_target"
-      rc2=$?
-      set -e
-      if [ $rc1 -eq 0 ] && [ $rc2 -eq 0 ]; then
-        configured=1
-      else
-        warn "alternatives failed (install rc=$rc1, set rc=$rc2); will use symlink fallback."
-      fi
-    fi
-
-    if [ $configured -eq 0 ]; then
-      # Fallback: symlink to ensure `python3` resolves to 3.11
-      if printf "%s" "$PATH" | tr ':' '\n' | grep -q "^/usr/local/bin$"; then
-        info "Setting python3 via symlink in /usr/local/bin -> $abs_target"
-        $SUDO install -d /usr/local/bin
-        $SUDO ln -sf "$abs_target" /usr/local/bin/python3
-      else
-        info "Setting python3 via symlink in /usr/bin -> $abs_target"
-        $SUDO ln -sf "$abs_target" /usr/bin/python3
-      fi
-    fi
-
-    new_ver="$(python3 --version 2>/dev/null | awk '{print $2}' || true)"
-    new_path="$(command -v python3 2>/dev/null || true)"
-    if [ -n "$new_ver" ] && [ "${new_ver%%.*}" -eq 3 ] && [ "$(echo "$new_ver" | cut -d. -f2)" -eq 11 ]; then
-      info "python3 now points to Python $new_ver at $new_path"
+  if command -v update-alternatives >/dev/null 2>&1; then
+    info "Setting python3 via update-alternatives -> $abs_target"
+    set +e
+    $SUDO update-alternatives --install /usr/bin/python3 python3 "$abs_target" 311
+    rc1=$?
+    $SUDO update-alternatives --set python3 "$abs_target"
+    rc2=$?
+    set -e
+    if [ $rc1 -eq 0 ] && [ $rc2 -eq 0 ]; then
+      configured=1
     else
-      warn "Unable to confirm python3 pointing to Python 3.11; current: ${new_ver:-unknown} at ${new_path:-unknown}"
+      warn "update-alternatives failed (install rc=$rc1, set rc=$rc2); will try alternatives or symlink."
     fi
+  fi
+
+  if [ $configured -eq 0 ] && command -v alternatives >/dev/null 2>&1; then
+    info "Setting python3 via alternatives -> $abs_target"
+    set +e
+    $SUDO alternatives --install /usr/bin/python3 python3 "$abs_target" 311
+    rc1=$?
+    $SUDO alternatives --set python3 "$abs_target"
+    rc2=$?
+    set -e
+    if [ $rc1 -eq 0 ] && [ $rc2 -eq 0 ]; then
+      configured=1
+    else
+      warn "alternatives failed (install rc=$rc1, set rc=$rc2); will use symlink fallback."
+    fi
+  fi
+
+  if [ $configured -eq 0 ]; then
+    # Fallback: symlink to ensure `python3` resolves to 3.11
+    if printf "%s" "$PATH" | tr ':' '\n' | grep -q "^/usr/local/bin$"; then
+      info "Setting python3 via symlink in /usr/local/bin -> $abs_target"
+      $SUDO install -d /usr/local/bin
+      $SUDO ln -sf "$abs_target" /usr/local/bin/python3
+    else
+      info "Setting python3 via symlink in /usr/bin -> $abs_target"
+      $SUDO ln -sf "$abs_target" /usr/bin/python3
+    fi
+  fi
+
+  new_ver="$(python3 --version 2>/dev/null | awk '{print $2}' || true)"
+  new_path="$(command -v python3 2>/dev/null || true)"
+  if [ -n "$new_ver" ] && [ "${new_ver%%.*}" -eq 3 ] && [ "$(echo "$new_ver" | cut -d. -f2)" -eq 11 ]; then
+    info "python3 now points to Python $new_ver at $new_path"
+  else
+    warn "Unable to confirm python3 pointing to Python 3.11; current: ${new_ver:-unknown} at ${new_path:-unknown}"
+  fi
 }
 
 install_python311() {
