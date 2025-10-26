@@ -122,6 +122,14 @@ fi
 # OS and PM detection
 # -----------------------------
 OS="$(uname -s || echo unknown)"
+# Ensure Homebrew is installed on macOS (Darwin)
+if [ "$OS" = "Darwin" ] && ! command -v brew >/dev/null 2>&1; then
+  info "Homebrew not detected; installing Homebrew..."
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  # Update PATH for current session if brew was installed
+  eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
+  eval "$(/usr/local/bin/brew shellenv)" 2>/dev/null || true
+fi
 detect_pm() {
   # Prefer more modern managers where overlaps exist
   if command -v apt-get >/dev/null 2>&1; then echo "apt"; return; fi
@@ -381,6 +389,175 @@ install_python311() {
   ensure_pip311
   # Set python3 default to 3.11 after successful install
   set_python3_default_to_311
+}
+
+verify_and_fix_python3_symlink_darwin() {
+  info "Verifying python3 symlink on macOS (Darwin)..."
+  cur_ver="$(python3 --version 2>/dev/null | awk '{print $2}' || true)"
+  if [ -n "$cur_ver" ] && [ "${cur_ver%%.*}" -eq 3 ] && [ "$(echo "$cur_ver" | cut -d. -f2)" -eq 11 ]; then
+    info "python3 already resolves to Python $cur_ver"
+    return 0
+  fi
+
+  target="$PYTHON_BIN"
+  if [ -z "$target" ] || [ ! -x "$target" ]; then
+    prefix="$(command -v brew >/dev/null 2>&1 && brew --prefix || echo "/opt/homebrew")"
+    alt="$prefix/opt/python@3.11/bin/python3.11"
+    if [ -x "$alt" ]; then
+      target="$alt"
+    else
+      warn "Python 3.11 binary not found at expected locations."
+      return 1
+    fi
+  fi
+
+  link_dir="/usr/local/bin"
+  link_path="$link_dir/python3"
+
+  if [ ! -d "$link_dir" ]; then
+    info "Creating directory $link_dir"
+    $SUDO install -d "$link_dir" 2>/dev/null || {
+      warn "Failed to create $link_dir; cannot fix symlink automatically."
+      return 1
+    }
+  fi
+
+  info "Setting symlink $link_path -> $target"
+  if $SUDO ln -sf "$target" "$link_path" 2>/dev/null; then
+    info "Symlink updated: $link_path -> $target"
+  else
+    warn "Failed to set symlink at $link_path; attempting alternative locations."
+    if command -v brew >/dev/null 2>&1; then
+      prefix="$(brew --prefix)"
+      link_path_alt="$prefix/bin/python3"
+      if $SUDO ln -sf "$target" "$link_path_alt" 2>/dev/null; then
+        info "Symlink updated: $link_path_alt -> $target"
+      else
+        warn "Failed to update symlink at $link_path_alt."
+        return 1
+      fi
+    else
+      return 1
+    fi
+  fi
+
+  # Ensure /usr/local/bin is early in PATH for this session
+  first_path_component="$(printf "%s" "$PATH" | tr ':' '\n' | awk 'NR==1')"
+  if [ "$first_path_component" != "/usr/local/bin" ]; then
+    if ! printf "%s" "$PATH" | tr ':' '\n' | grep -q "^/usr/local/bin$"; then
+      info "Prepending /usr/local/bin to PATH for current session"
+      export PATH="/usr/local/bin:$PATH"
+    else
+      info "Moving /usr/local/bin to front of PATH for current session"
+      NEWPATH="/usr/local/bin"
+      OLDIFS="$IFS"; IFS=':'
+      for d in $PATH; do
+        [ "$d" = "/usr/local/bin" ] && continue
+        NEWPATH="$NEWPATH:$d"
+      done
+      IFS="$OLDIFS"
+      export PATH="$NEWPATH"
+    fi
+  fi
+
+  hash -r 2>/dev/null || true
+
+  new_ver="$(python3 --version 2>/dev/null | awk '{print $2}' || true)"
+  new_path="$(command -v python3 2>/dev/null || true)"
+  if [ -n "$new_ver" ] && [ "${new_ver%%.*}" -eq 3 ] && [ "$(echo "$new_ver" | cut -d. -f2)" -eq 11 ]; then
+    info "python3 now resolves to Python $new_ver at $new_path"
+    return 0
+  else
+    warn "python3 still does not resolve to Python 3.11; current: ${new_ver:-unknown} at ${new_path:-unknown}"
+    return 1
+  fi
+}
+
+setup_brew_env_darwin() {
+  # Configure Homebrew env, define refreshenv alias, persist to ~/.zshrc, and reload
+  if [ "$OS" != "Darwin" ]; then
+    return 0
+  fi
+
+  if ! command -v brew >/dev/null 2>&1; then
+    warn "Homebrew not installed; skipping environment setup."
+    return 0
+  fi
+
+  info "Configuring Homebrew environment for current session"
+  rc=0
+  set +e
+  eval "$(/opt/homebrew/bin/brew shellenv)" >/dev/null 2>&1
+  rc=$?
+  if [ $rc -ne 0 ]; then
+    eval "$(/usr/local/bin/brew shellenv)" >/dev/null 2>&1
+    rc=$?
+  fi
+  set -e
+  if [ $rc -eq 0 ]; then
+    info "Homebrew environment loaded."
+  else
+    warn "Failed to load Homebrew environment."
+  fi
+
+  # Define alias in current session (ignore failure if shell doesn't support alias)
+  set +e
+  alias refreshenv='eval "$(/opt/homebrew/bin/brew shellenv)"'
+  alias_rc=$?
+  set -e
+  if [ $alias_rc -eq 0 ]; then
+    info "Alias 'refreshenv' defined for current session."
+  else
+    warn "Alias not supported in current shell; persisting to ~/.zshrc only."
+  fi
+
+  # Persist alias to user's ~/.zshrc idempotently
+  TARGET_USER="${SUDO_USER:-$(id -un)}"
+  TARGET_HOME="$(eval echo "~$TARGET_USER")"
+  ZSHRC="$TARGET_HOME/.zshrc"
+  if [ ! -e "$ZSHRC" ]; then
+    info "Creating $ZSHRC"
+    if touch "$ZSHRC" 2>/dev/null; then
+      info "$ZSHRC created."
+    else
+      warn "Unable to create $ZSHRC; alias not persisted."
+      return 0
+    fi
+  fi
+
+  if grep -q "alias refreshenv='eval \"\$(/opt/homebrew/bin/brew shellenv)\"'" "$ZSHRC"; then
+    info "Alias 'refreshenv' already present in $ZSHRC."
+  else
+    info "Persisting alias 'refreshenv' into $ZSHRC"
+    printf "alias refreshenv='eval \"\$(/opt/homebrew/bin/brew shellenv)\"'\n" >> "$ZSHRC" 2>/dev/null || {
+      warn "Failed to append alias to $ZSHRC."
+    }
+  fi
+
+  # Reload shell configuration
+  if command -v zsh >/dev/null 2>&1; then
+    info "Reloading zsh configuration from $ZSHRC"
+    set +e
+    zsh -c "source \"$ZSHRC\"" >/dev/null 2>&1
+    zsh_rc=$?
+    set -e
+    if [ $zsh_rc -eq 0 ]; then
+      info "zsh configuration reloaded."
+    else
+      warn "Failed to source $ZSHRC with zsh; open a new shell."
+    fi
+  else
+    info "zsh not found; attempting POSIX dot-sourcing"
+    set +e
+    . "$ZSHRC" >/dev/null 2>&1
+    dot_rc=$?
+    set -e
+    if [ $dot_rc -eq 0 ]; then
+      info "Configuration loaded via POSIX source."
+    else
+      warn "Failed to source $ZSHRC in current shell; open a new shell."
+    fi
+  fi
 }
 
 # -----------------------------
@@ -669,6 +846,12 @@ pm_system_update
 
 info "Step 1/3: Installing Python 3.11 + pip"
 install_python311
+# macOS post-install: brew env setup, alias persistence, and symlink verification
+if [ "$OS" = "Darwin" ]; then
+  info "macOS: Setting up Homebrew environment and alias"
+  setup_brew_env_darwin
+  verify_and_fix_python3_symlink_darwin || warn "macOS python3 symlink verification/correction encountered issues."
+fi
 
 info "Step 2/3: Installing Git"
 install_git
