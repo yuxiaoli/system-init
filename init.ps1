@@ -911,9 +911,9 @@ function Invoke-PostInit {
         if (Test-Path $setupScript -PathType Leaf -ErrorAction SilentlyContinue) {
             Write-Log -Level 'INFO' -Message "Post-init: Running setup script windows_init.py"
             if ($PythonCmd -eq 'py') {
-                & py -3.11 $setupScript# | Out-Null
+                & py -3.11 $setupScript
             } elseif ($PythonCmd) {
-                & $PythonCmd $setupScript# | Out-Null
+                & $PythonCmd $setupScript
             }
         } else {
             Write-Log -Level 'WARN' -Message "Setup script not found at $setupScript"
