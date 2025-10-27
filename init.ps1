@@ -351,6 +351,150 @@ function Add-Python3Shim {
         if (-not (Test-Path $profilePath)) {
             New-Item -ItemType File -Path $profilePath -Force | Out-Null
         }
+
+        $profileContent = Get-Content -Path $profilePath -ErrorAction SilentlyContinue
+        $hasRefreshEnv = ($profileContent -join "`n") -match 'function\s+refreshenv'
+
+        if (-not $hasRefreshEnv) {
+            Add-Content -Path $profilePath -Value @'
+function refreshenv {
+    try {
+        $machinePath = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" -Name Path -ErrorAction SilentlyContinue).Path
+        $userPath    = (Get-ItemProperty -Path "HKCU:\Environment" -Name Path -ErrorAction SilentlyContinue).Path
+        $combined    = ($machinePath, $userPath) -join ";"
+        if ($combined) { $env:Path = $combined }
+        Write-Host "Refreshed PATH for current session."
+    } catch {
+        Write-Host ("Failed to refresh PATH from registry: " + $_.Exception.Message)
+    }
+}
+'@
+            Write-Log -Level 'INFO' -Message "Persisted 'refreshenv' function to PowerShell profile: $profilePath"
+        } else {
+            Write-Log -Level 'INFO' -Message "PowerShell profile already contains 'refreshenv' function."
+        }
+    } catch {
+        Write-Log -Level 'WARN' -Message "Failed to persist 'refreshenv' function: $($_.Exception.Message)"
+    }
+}
+function Invoke-PostInit {
+    Write-Log -Level 'INFO' -Message "Post-init: refreshing environment and validating setup"
+
+    # Attempt to refresh PATH/env for current session
+    Refresh-Environment
+
+    # Ensure a convenient refresh helper exists for future sessions
+    Ensure-RefreshEnvAlias
+
+    # Verify Python 3.11 and pip
+    try {
+        $pyExe = Get-Python311Exe
+        if ($pyExe) {
+            $pyVer = (& $pyExe --version 2>$null)
+            Write-Log -Level 'INFO' -Message "Python 3.11 detected: $pyVer ($pyExe)"
+
+            try {
+                $pipVer = (& $pyExe -m pip --version 2>$null)
+                if ($pipVer) {
+                    Write-Log -Level 'INFO' -Message "pip for Python 3.11 detected: $pipVer"
+                } else {
+                    Write-Log -Level 'WARN' -Message "pip for Python 3.11 not found."
+                }
+            } catch {
+                Write-Log -Level 'WARN' -Message "pip check failed: $($_.Exception.Message)"
+            }
+        } else {
+            Write-Log -Level 'WARN' -Message "Python 3.11 executable not found after install."
+        }
+    } catch {
+        Write-Log -Level 'WARN' -Message "Python verification failed: $($_.Exception.Message)"
+    }
+
+    # Validate python3 shim (cmd) and resolution
+    try {
+        $userBin = Join-Path $env:USERPROFILE 'bin'
+        $shim    = Join-Path $userBin 'python3.cmd'
+        if (Test-Path $shim) {
+            $python3Ver = (& python3 --version 2>$null)
+            if ($python3Ver -match '^Python 3\.11') {
+                Write-Log -Level 'INFO' -Message "python3 shim OK: $python3Ver"
+            } else {
+                Write-Log -Level 'WARN' -Message "python3 shim present but does not resolve to Python 3.11 (current: '${python3Ver}')"
+            }
+        } else {
+            Write-Log -Level 'WARN' -Message "python3 shim not found at: $shim"
+        }
+    } catch {
+        Write-Log -Level 'WARN' -Message "python3 shim verification failed: $($_.Exception.Message)"
+    }
+
+    # Verify Git
+    try {
+        $gitCmd = Get-Command git -ErrorAction SilentlyContinue
+        if ($gitCmd) {
+            Write-Log -Level 'INFO' -Message ("Git detected: " + (& $gitCmd.Source --version 2>$null))
+        } else {
+            $gitExe = Get-GitExe
+            if ($gitExe) {
+                Write-Log -Level 'INFO' -Message ("Git detected: " + (& $gitExe --version 2>$null))
+            } else {
+                Write-Log -Level 'WARN' -Message "Git not found after install."
+            }
+        }
+    } catch {
+        Write-Log -Level 'WARN' -Message "Git verification failed: $($_.Exception.Message)"
+    }
+
+    # Verify 1Password Desktop
+    try {
+        if (Test-1PasswordInstalled) {
+            Write-Log -Level 'INFO' -Message "1Password Desktop present."
+        } else {
+            Write-Log -Level 'WARN' -Message "1Password Desktop not detected."
+        }
+    } catch {
+        Write-Log -Level 'WARN' -Message "1Password Desktop check failed: $($_.Exception.Message)"
+    }
+
+    # Verify 1Password CLI ('op')
+    try {
+        $opCmd = Get-Command op -ErrorAction SilentlyContinue
+        if ($opCmd) {
+            Write-Log -Level 'INFO' -Message ("1Password CLI detected: " + (& $opCmd.Source --version 2>$null))
+        } else {
+            $opExe = Get-OpExe
+            if ($opExe) {
+                Write-Log -Level 'INFO' -Message ("1Password CLI detected: " + (& $opExe --version 2>$null))
+            } else {
+                Write-Log -Level 'WARN' -Message "1Password CLI ('op') not detected."
+            }
+        }
+    } catch {
+        Write-Log -Level 'WARN' -Message "1Password CLI verification failed: $($_.Exception.Message)"
+    }
+
+    Write-Log -Level 'INFO' -Message "Post-init verification complete. If new tools were added to PATH, restart your shell."
+    # Optional: return a simple success flag
+}
+
+function Add-Python3Shim {
+    param([string]$Python311Exe)
+    try {
+        $userBin = Ensure-UserBinOnPath
+        $shim = Join-Path $userBin 'python3.cmd'
+        $shimContent = "@echo off`r`npy -3.11 %*`r`n"
+        Set-Content -Path $shim -Value $shimContent -Force -Encoding ASCII
+        Write-Log -Level 'INFO' -Message "Created python3 shim: $shim"
+    } catch {
+        Write-Log -Level 'WARN' -Message "Failed to create python3 shim: $($_.Exception.Message)"
+    }
+
+    # PowerShell function alias in profile (works in PS sessions)
+    try {
+        $profilePath = $PROFILE.CurrentUserAllHosts
+        if (-not (Test-Path $profilePath)) {
+            New-Item -ItemType File -Path $profilePath -Force | Out-Null
+        }
         $profileContent = Get-Content -Path $profilePath -ErrorAction SilentlyContinue
         if (-not ($profileContent -join "`n" -match 'function\s+python3')) {
             Add-Content -Path $profilePath -Value @'
@@ -613,8 +757,8 @@ function Install-1PasswordCLI {
     switch ($PM) {
         'winget' {
             $ok = Install-WithWinget -CandidateIds @(
-                '1Password.1PasswordCLI',
-                'AgileBits.1Password.CLI'
+                'AgileBits.1Password.CLI',
+                '1Password.1PasswordCLI'
             ) -DisplayName '1Password CLI'
         }
         'choco' {
@@ -653,7 +797,7 @@ function Install-1PasswordCLI {
     }
 }
 
-# Removed stray closing brace and the 'process { ... }' wrapper; continue at script scope
+# Main execution (script scope)
 Write-Log -Level 'INFO' -Message "Log file: $LogFile"
 if (-not (Test-Network)) {
     Write-Log -Level 'WARN' -Message "Network check failed or web requests blocked. Proceeding; downloads may fail."
@@ -662,17 +806,17 @@ if (-not (Test-Network)) {
 Write-Log -Level 'INFO' -Message "Pre-flight: Updating system packages"
 Update-SystemPackages
 
-Write-Log -Level 'INFO' -Message "Step 1/4: Installing Python 3.11 + pip"
+Write-Log -Level 'INFO' -Message "Step 1/3: Installing Python 3.11 + pip"
 Install-Python311
 
-Write-Log -Level 'INFO' -Message "Step 2/4: Installing Git"
+Write-Log -Level 'INFO' -Message "Step 2/3: Installing Git"
 Install-Git
 
-Write-Log -Level 'INFO' -Message "Step 3/4: Installing 1Password (desktop)"
+Write-Log -Level 'INFO' -Message "Step 3/3: Installing 1Password"
 Install-1Password
 
-Write-Log -Level 'INFO' -Message "Step 4/4: Installing 1Password CLI"
-Install-1PasswordCLI
+Write-Log -Level 'INFO' -Message "Post-init: Validating environment and configuration"
+Invoke-PostInit
 
 Write-Log -Level 'INFO' -Message "Script completed successfully."
 exit 0
