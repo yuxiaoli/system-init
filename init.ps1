@@ -598,6 +598,43 @@ public static extern IntPtr SendMessageTimeout(IntPtr hWnd, int Msg, IntPtr wPar
     } catch { }
 }
 
+function Ensure-RefreshEnvAlias {
+    try {
+        $profilePath = $PROFILE.CurrentUserAllHosts
+        if (-not (Test-Path $profilePath)) {
+            New-Item -ItemType File -Path $profilePath -Force | Out-Null
+        }
+
+        $profileContent = Get-Content -Path $profilePath -ErrorAction SilentlyContinue
+        $hasRefreshEnv = ($profileContent -join "`n") -match 'function\s+refreshenv'
+
+        if (-not $hasRefreshEnv) {
+            Add-Content -Path $profilePath -Value @'
+function refreshenv {
+    param()
+    try {
+        $machinePath = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" -Name Path -ErrorAction SilentlyContinue).Path
+        $userPath    = (Get-ItemProperty -Path "HKCU:\Environment" -Name Path -ErrorAction SilentlyContinue).Path
+        $combined    = ($machinePath, $userPath) -join ";"
+        if ($combined) { $env:Path = $combined }
+        Write-Host "Refreshed PATH for current session."
+    } catch {
+        Write-Host ("Failed to refresh PATH from registry: " + $_.Exception.Message)
+    }
+}
+'@
+            Write-Log -Level 'INFO' -Message "Persisted 'refreshenv' function to PowerShell profile: $profilePath"
+        } else {
+            Write-Log -Level 'INFO' -Message "PowerShell profile already contains 'refreshenv' function."
+        }
+    } catch {
+        Write-Log -Level 'WARN' -Message "Failed to persist 'refreshenv' function: $($_.Exception.Message)"
+    }
+}
+function Install-Git {
+    // ... existing code ...
+}
+
 function Install-Git {
     if (Get-Command git -ErrorAction SilentlyContinue) {
         Write-Log -Level 'INFO' -Message ("Git already installed: " + (& git --version))
