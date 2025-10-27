@@ -377,10 +377,16 @@ install_python311() {
       PYTHON_BIN="python3"
       ;;
     brew)
-      # Homebrew has versioned formula
-      brew list --versions python@3.11 >/dev/null 2>&1 || brew install python@3.11
+      // ... existing code ...
+      set -e
+      if [ $rc -ne 0 ]; then
+        die "$EC_PYTHON" "python@3.11 install failed or unavailable via Homebrew."
+      fi
       PYTHON_BIN="$(brew --prefix)/opt/python@3.11/bin/python3.11"
       PIP_BIN="$(brew --prefix)/opt/python@3.11/bin/pip3.11"
+      if [ ! -x "$PYTHON_BIN" ]; then
+        die "$EC_PYTHON" "python@3.11 installed, but binary not found at $PYTHON_BIN."
+      fi
       ;;
     *)
       die "$EC_UNSUPPORTED" "Unsupported package manager for Python installation."
@@ -585,14 +591,16 @@ install_git() {
 # 1Password (official)
 # -----------------------------
 install_1password_apt() {
-  info "Configuring 1Password apt repository..."
-  $SUDO install -d /usr/share/keyrings /etc/apt/sources.list.d /etc/debsig/policies/AC2D62742012EA22 /usr/share/debsig/keyrings/AC2D62742012EA22
-  curl -fsSL https://downloads.1password.com/linux/keys/1password.asc | $SUDO gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
-  echo "deb [arch=amd64 signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/amd64 stable main" | $SUDO tee /etc/apt/sources.list.d/1password.list >/dev/null
-  curl -fsSL https://downloads.1password.com/linux/debian/debsig/1password.pol | $SUDO tee /etc/debsig/policies/AC2D62742012EA22/1password.pol >/dev/null
-  curl -fsSL https://downloads.1password.com/linux/keys/1password.asc | $SUDO gpg --dearmor --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg
   $SUDO apt-get update
-  $SUDO apt-get install $YES_FLAG 1password
+  info "Installing 1Password CLI via apt..."
+  set +e
+  $SUDO apt-get install $YES_FLAG 1password-cli
+  rc=$?
+  set -e
+  if [ $rc -ne 0 ]; then
+    die "$EC_1PASSWORD" "Failed to install 1Password CLI via apt."
+  fi
+  info "1Password CLI installed: $(op --version)"
 }
 
 install_1password_dnf() {
@@ -612,47 +620,64 @@ install_1password_dnf() {
 }
 
 install_1password_zypper() {
-  info "Configuring 1Password zypper repository..."
-  $SUDO rpm --import https://downloads.1password.com/linux/keys/1password.asc
-  $SUDO zypper addrepo https://downloads.1password.com/linux/rpm/stable/x86_64 1password || true
-  $SUDO zypper -n install 1password
+  info "Installing 1Password CLI via zypper..."
+  set +e
+  $SUDO zypper -n install 1password-cli
+  rc=$?
+  set -e
+  if [ $rc -ne 0 ]; then
+    die "$EC_1PASSWORD" "Failed to install 1Password CLI via zypper."
+  fi
+  info "1Password CLI installed: $(op --version)"
 }
 
 install_1password_pacman_aur() {
-  # Official AUR package maintained by 1Password (build needs non-root user)
-  if pacman -Qi 1password >/dev/null 2>&1; then
-    info "1Password already installed (pacman)."
+  if pacman -Qi 1password-cli >/dev/null 2>&1; then
+    info "1Password CLI already installed (pacman)."
     return 0
   fi
 
-  info "Installing 1Password via AUR (Arch)"
+  info "Installing 1Password CLI via AUR (Arch)"
   pm_update
   pm_install base-devel
-  # Ensure git is present (script also installs git earlier)
   command -v git >/dev/null 2>&1 || pm_install git
 
   TMPDIR="$(mktemp -d)"
   info "Using temp build dir: $TMPDIR"
 
-  # Determine user to build as (avoid building as root)
   BUILD_USER="${SUDO_USER:-$(id -un)}"
   if [ "$(id -u)" -eq 0 ]; then
     info "Building AUR package as user: $BUILD_USER"
-    $SUDO -u "$BUILD_USER" sh -c "git clone https://aur.archlinux.org/1password.git '$TMPDIR/1password' && cd '$TMPDIR/1password' && makepkg -si $YES_FLAG"
+    $SUDO -u "$BUILD_USER" sh -c "git clone https://aur.archlinux.org/1password-cli.git '$TMPDIR/1password-cli' && cd '$TMPDIR/1password-cli' && makepkg -si $YES_FLAG"
   else
-    git clone https://aur.archlinux.org/1password.git "$TMPDIR/1password"
-    cd "$TMPDIR/1password"
+    git clone https://aur.archlinux.org/1password-cli.git "$TMPDIR/1password-cli"
+    cd "$TMPDIR/1password-cli"
     makepkg -si $YES_FLAG
   fi
+
+  if ! command -v op >/dev/null 2>&1; then
+    die "$EC_1PASSWORD" "1Password CLI installation via AUR did not produce 'op' executable."
+  fi
+  info "1Password CLI installed: $(op --version)"
 }
 
 install_1password_brew() {
-  if command -v 1password >/dev/null 2>&1; then
-    info "1Password already installed (macOS)."
+  # Align with yum: install the CLI ('op'), not just the app
+  if command -v op >/dev/null 2>&1; then
+    info "1Password CLI already installed (macOS): $(op --version)"
     return 0
   fi
-  info "Installing 1Password via Homebrew cask..."
-  brew install --cask 1password
+
+  info "Installing 1Password CLI via Homebrew..."
+  set +e
+  brew list --versions 1password-cli >/dev/null 2>&1 || brew install 1password-cli
+  rc=$?
+  set -e
+  if [ $rc -ne 0 ]; then
+    die "$EC_1PASSWORD" "Failed to install 1Password CLI via Homebrew."
+  fi
+
+  info "1Password CLI installed: $(op --version)"
 }
 
 install_1password() {

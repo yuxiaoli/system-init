@@ -517,6 +517,25 @@ function Get-GitExe {
     return $null
 }
 
+function Get-OpExe {
+    $candidates = @(
+        "$env:ProgramFiles\1Password CLI\op.exe",
+        "$env:LOCALAPPDATA\Programs\1Password CLI\op.exe",
+        "$env:LOCALAPPDATA\1Password\op.exe",
+        "$env:ProgramData\chocolatey\bin\op.exe",
+        (Join-Path $env:USERPROFILE 'scoop\apps\1password-cli\current\op.exe'),
+        (Join-Path $env:USERPROFILE 'scoop\apps\op\current\op.exe')
+    )
+    foreach ($p in $candidates) {
+        if ($p -and (Test-Path $p)) { return $p }
+    }
+    try {
+        $cmd = Get-Command op -ErrorAction SilentlyContinue
+        if ($cmd) { return $cmd.Source }
+    } catch { }
+    return $null
+}
+
 function Test-1PasswordInstalled {
     # 1Password desktop app typical paths
     $paths = @(
@@ -577,6 +596,63 @@ function Install-1Password {
     }
 }
 
+function Test-1PasswordCLIInstalled {
+    $exe = Get-OpExe
+    return [bool]$exe
+}
+function Install-1PasswordCLI {
+    if (Test-1PasswordCLIInstalled) {
+        Write-Log -Level 'INFO' -Message "1Password CLI already installed."
+        return
+    }
+
+    Write-Log -Level 'INFO' -Message "Installing 1Password CLI..."
+    Update-SystemPackages
+
+    $ok = $false
+    switch ($PM) {
+        'winget' {
+            $ok = Install-WithWinget -CandidateIds @(
+                '1Password.1PasswordCLI',
+                'AgileBits.1Password.CLI'
+            ) -DisplayName '1Password CLI'
+        }
+        'choco' {
+            $ok = Install-WithChoco -CommandLine '1password-cli'
+            if (-not $ok) { $ok = Install-WithChoco -CommandLine 'op' }
+        }
+        'scoop' {
+            try { scoop bucket add extras | Out-Null } catch { }
+            $ok = Install-WithScoop -PackageSpec '1password-cli'
+            if (-not $ok) { $ok = Install-WithScoop -PackageSpec 'op' }
+        }
+    }
+
+    if (-not $ok -and -not (Test-1PasswordCLIInstalled)) {
+        Die $EC_1PASSWORD '1Password CLI installation failed or package not found.'
+    }
+
+    Refresh-Environment
+
+    $opCmd = Get-Command op -ErrorAction SilentlyContinue
+    if ($opCmd) {
+        Write-Log -Level 'INFO' -Message ("1Password CLI installed: " + (& $opCmd.Source --version))
+        return
+    }
+
+    $opExe = Get-OpExe
+    if ($opExe) {
+        $opDir = Split-Path -Parent $opExe
+        if ($opDir -and ($env:Path -split ';' | Where-Object { $_.Trim() -eq $opDir }).Count -eq 0) {
+            $env:Path = "$opDir;$env:Path"
+            Write-Log -Level 'INFO' -Message "Added '$opDir' to PATH for current session."
+        }
+        Write-Log -Level 'INFO' -Message ("1Password CLI installed: " + (& $opExe --version))
+    } else {
+        Die $EC_1PASSWORD '1Password CLI installation completed, but executable not found in PATH or known locations.'
+    }
+}
+
 # Removed stray closing brace and the 'process { ... }' wrapper; continue at script scope
 Write-Log -Level 'INFO' -Message "Log file: $LogFile"
 if (-not (Test-Network)) {
@@ -586,14 +662,17 @@ if (-not (Test-Network)) {
 Write-Log -Level 'INFO' -Message "Pre-flight: Updating system packages"
 Update-SystemPackages
 
-Write-Log -Level 'INFO' -Message "Step 1/3: Installing Python 3.11 + pip"
+Write-Log -Level 'INFO' -Message "Step 1/4: Installing Python 3.11 + pip"
 Install-Python311
 
-Write-Log -Level 'INFO' -Message "Step 2/3: Installing Git"
+Write-Log -Level 'INFO' -Message "Step 2/4: Installing Git"
 Install-Git
 
-Write-Log -Level 'INFO' -Message "Step 3/3: Installing 1Password"
+Write-Log -Level 'INFO' -Message "Step 3/4: Installing 1Password (desktop)"
 Install-1Password
 
-Write-Log -Level 'INFO' -Message "All done."
+Write-Log -Level 'INFO' -Message "Step 4/4: Installing 1Password CLI"
+Install-1PasswordCLI
+
+Write-Log -Level 'INFO' -Message "Script completed successfully."
 exit 0
