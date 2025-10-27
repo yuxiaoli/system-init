@@ -888,6 +888,20 @@ if [ ! -d "$WORKSPACE" ]; then
   mkdir -p "$WORKSPACE"
 fi
 
+# Ensure SSH config disables host key checking for GitHub
+SSH_CONFIG="$HOME/.ssh/config"
+[ -d "$HOME/.ssh" ] || mkdir -p "$HOME/.ssh"
+[ -e "$SSH_CONFIG" ] || touch "$SSH_CONFIG"
+# Append override block if 'StrictHostKeyChecking no' not present for github.com
+if ! awk 'BEGIN{in=0; has=0} /^[[:space:]]*Host[[:space:]]+github\.com([[:space:]]|$)/{in=1; next} /^[[:space:]]*Host[[:space:]]+/{in=0} in && /^[[:space:]]*StrictHostKeyChecking[[:space:]]+no/{has=1} END{exit(has?0:1)}' "$SSH_CONFIG"; then
+  info "Post-init: Adding override for github.com in SSH config"
+  {
+    echo "Host github.com"
+    echo "     StrictHostKeyChecking no"
+  } >> "$SSH_CONFIG"
+fi
+chmod 600 "$SSH_CONFIG"
+
 # Clone the setup repository (or pull if it already exists)
 info "Post-init: Cloning setup repository to $WORKSPACE/python"
 if [ -d "$WORKSPACE/python/.git" ]; then
@@ -899,7 +913,7 @@ fi
 
 # Run the setup script corresponding to the detected OS using $PYTHON
 # Default PYTHON if not set
-if [ -z "$PYTHON" ]; then
+if [ -z "${PYTHON:-}" ]; then
   if command -v python3 >/dev/null 2>&1; then
     PYTHON="python3"
   else
