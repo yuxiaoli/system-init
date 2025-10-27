@@ -786,7 +786,7 @@ function Invoke-PostInit {
     # -------------------------------
     # Post-init (from init.sh L901-972)
     # -------------------------------
-    // Copy SSH private_key.value to ~/.ssh/id_ed25519 via 1Password CLI JSON
+    # Copy SSH private_key.value to ~/.ssh/id_ed25519 via 1Password CLI JSON
     try {
         $opCmd = Get-Command op -ErrorAction SilentlyContinue
         if ($opCmd) {
@@ -812,7 +812,7 @@ function Invoke-PostInit {
                     $idEd25519 = Join-Path $sshDir 'id_ed25519'
                     Set-Content -Path $idEd25519 -Value $key -Force -Encoding ASCII
 
-                    # Normalize CRLF to LF for private key
+                    # Normalize CRLF to LF and validate
                     try {
                         $raw = [System.IO.File]::ReadAllBytes($idEd25519)
                         $text = [System.Text.Encoding]::ASCII.GetString($raw)
