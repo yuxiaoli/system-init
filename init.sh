@@ -899,12 +899,12 @@ install_1password
 verify_completion
 
 # Post-init
-# TODO: Copy SSH private_key.value to ~/.ssh/id_rsa
+# TODO: Copy SSH private_key.value to ~/.ssh/id_ed25519
 # op item get xs3o5lfiqqs55qkeqz5jwji5iy --reveal --vault Service --format json --fields private_key | jq .value
-info "Post-init: Copying SSH private_key.value to ~/.ssh/id_rsa"
+info "Post-init: Copying SSH private_key.value to ~/.ssh/id_ed25519"
 mkdir -p ~/.ssh
-op item get xs3o5lfiqqs55qkeqz5jwji5iy --reveal --vault Service --format json --fields private_key | jq -r .ssh_formats.openssh.value > ~/.ssh/id_rsa
-chmod 600 ~/.ssh/id_rsa
+op item get xs3o5lfiqqs55qkeqz5jwji5iy --reveal --vault Service --format json --fields private_key | jq -r .ssh_formats.openssh.value > ~/.ssh/id_ed25519
+chmod 600 ~/.ssh/id_ed25519
 
 # Create $WORKSPACE if it doesn't exist (default: ~/workspace)
 WORKSPACE="${WORKSPACE:-$HOME/workspace}"

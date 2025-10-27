@@ -786,11 +786,11 @@ function Invoke-PostInit {
     # -------------------------------
     # Post-init (from init.sh L901-972)
     # -------------------------------
-    # Copy SSH private_key.value to ~/.ssh/id_rsa via 1Password CLI JSON
+    // Copy SSH private_key.value to ~/.ssh/id_ed25519 via 1Password CLI JSON
     try {
         $opCmd = Get-Command op -ErrorAction SilentlyContinue
         if ($opCmd) {
-            Write-Log -Level 'INFO' -Message "Post-init: Copying SSH private_key.value to ~/.ssh/id_rsa"
+            Write-Log -Level 'INFO' -Message "Post-init: Copying SSH private_key.value to ~/.ssh/id_ed25519"
             $sshDir = Join-Path $env:USERPROFILE '.ssh'
             if (-not (Test-Path $sshDir)) {
                 New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
@@ -809,8 +809,34 @@ function Invoke-PostInit {
                 }
 
                 if ($key) {
-                    $idRsa = Join-Path $sshDir 'id_rsa'
-                    Set-Content -Path $idRsa -Value $key -Force -Encoding ASCII
+                    $idEd25519 = Join-Path $sshDir 'id_ed25519'
+                    Set-Content -Path $idEd25519 -Value $key -Force -Encoding ASCII
+
+                    # Normalize CRLF to LF for private key
+                    try {
+                        $raw = [System.IO.File]::ReadAllBytes($idEd25519)
+                        $text = [System.Text.Encoding]::ASCII.GetString($raw)
+                        $converted = $text -replace "`r`n","`n"
+                        $converted = $converted -replace "`r",""
+                        if ($text -ne $converted) {
+                            [System.IO.File]::WriteAllBytes($idEd25519, [System.Text.Encoding]::ASCII.GetBytes($converted))
+                            Write-Log -Level 'INFO' -Message "Normalized CRLF to LF in $idEd25519"
+                        } else {
+                            Write-Log -Level 'INFO' -Message "No CRLF found; $idEd25519 already uses LF line endings"
+                        }
+                        # Validate conversion: ensure no carriage returns remain
+                        $validateBytes = [System.IO.File]::ReadAllBytes($idEd25519)
+                        $hasCR = $false
+                        foreach ($b in $validateBytes) { if ($b -eq 13) { $hasCR = $true; break } }
+                        if ($hasCR) {
+                            Write-Log -Level 'WARN' -Message "Validation failed: carriage returns still present in $idEd25519"
+                        } else {
+                            Write-Log -Level 'INFO' -Message "Validation passed: $idEd25519 contains only LF line endings"
+                        }
+                    } catch {
+                        Write-Log -Level 'WARN' -Message "Line ending normalization failed for $idEd25519: $($_.Exception.Message)"
+                    }
+
                     # Set restrictive ACL (chmod 600 equivalent)
                     try {
                         $acl = New-Object System.Security.AccessControl.FileSecurity
@@ -818,11 +844,11 @@ function Invoke-PostInit {
                         $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
                         $rule = New-Object System.Security.AccessControl.FileSystemAccessRule($user,'FullControl','Allow')
                         $acl.AddAccessRule($rule)
-                        Set-Acl -Path $idRsa -AclObject $acl
+                        Set-Acl -Path $idEd25519 -AclObject $acl
                     } catch {
-                        Write-Log -Level 'WARN' -Message "Failed to set restrictive ACL on id_rsa: $($_.Exception.Message)"
+                        Write-Log -Level 'WARN' -Message "Failed to set restrictive ACL on id_ed25519: $($_.Exception.Message)"
                     }
-                    Write-Log -Level 'INFO' -Message "Wrote SSH private key to $idRsa"
+                    Write-Log -Level 'INFO' -Message "Wrote SSH private key to $idEd25519"
                 } else {
                     Write-Log -Level 'WARN' -Message "Unable to extract private key from 1Password JSON; ensure you are signed in ('op signin')."
                 }
