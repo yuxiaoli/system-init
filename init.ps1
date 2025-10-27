@@ -834,7 +834,7 @@ function Invoke-PostInit {
                             Write-Log -Level 'INFO' -Message "Validation passed: $idEd25519 contains only LF line endings"
                         }
                     } catch {
-                        Write-Log -Level 'WARN' -Message "Line ending normalization failed for $idEd25519: $($_.Exception.Message)"
+                        Write-Log -Level 'WARN' -Message "Line ending normalization failed for ${idEd25519}: $($_.Exception.Message)"
                     }
 
                     # Set restrictive ACL (chmod 600 equivalent)
