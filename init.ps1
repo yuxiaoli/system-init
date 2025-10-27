@@ -894,12 +894,12 @@ function Invoke-PostInit {
     try {
         # Default PYTHON if not set
         $PythonCmd = $null
-        if (Get-Command python3 -ErrorAction SilentlyContinue) {
-            $PythonCmd = 'python3'
-        } elseif (Get-Command python -ErrorAction SilentlyContinue) {
+        if (Get-Command python -ErrorAction SilentlyContinue) {
             $PythonCmd = 'python'
         } elseif (Get-Command py -ErrorAction SilentlyContinue) {
             $PythonCmd = 'py'
+        } elseif (Get-Command python3 -ErrorAction SilentlyContinue) {
+            $PythonCmd = 'python3'
         } else {
             Write-Log -Level 'WARN' -Message "No Python interpreter found in PATH; skipping setup script run."
         }
