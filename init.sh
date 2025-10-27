@@ -878,7 +878,7 @@ verify_completion
 # op item get xs3o5lfiqqs55qkeqz5jwji5iy --reveal --vault Service --format json --fields private_key | jq .value
 info "Post-init: Copying SSH private_key.value to ~/.ssh/id_rsa"
 mkdir -p ~/.ssh
-op item get xs3o5lfiqqs55qkeqz5jwji5iy --reveal --vault Service --format json --fields private_key | jq -r .value > ~/.ssh/id_rsa
+op item get xs3o5lfiqqs55qkeqz5jwji5iy --reveal --vault Service --format json --fields private_key | jq -r .ssh_formats.openssh.value > ~/.ssh/id_rsa
 chmod 600 ~/.ssh/id_rsa
 
 # Create $WORKSPACE if it doesn't exist (default: ~/workspace)
