@@ -598,8 +598,8 @@ function Install-1PasswordCLI {
     switch ($PM) {
         'winget' {
             $ok = Install-WithWinget -CandidateIds @(
-                '1Password.1PasswordCLI',
-                'AgileBits.1Password.CLI'
+                'AgileBits.1Password.CLI',
+                '1Password.1PasswordCLI'
             ) -DisplayName '1Password CLI'
         }
         'choco' {
