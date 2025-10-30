@@ -10,7 +10,8 @@ Windows
 Powershell
 ```sh
 iex (iwr "https://raw.githubusercontent.com/yuxiaoli/system-init/refs/heads/main/init.bat" -UseBasicParsing).Content
-
+```
+```sh
 (iwr "https://raw.githubusercontent.com/yuxiaoli/system-init/main/init.ps1" -UseBasicParsing).Content > init.ps1; .\init.ps1 -Yes
 ```
 
