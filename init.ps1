@@ -878,10 +878,12 @@ function Invoke-PostInit {
 
     # Clone the setup repository (or pull if it already exists)
     $repo = "git@github.com:yuxiaoli/app-manager.git"
-    $repoPath = Join-Path $WORKSPACE 'python' ([IO.Path]::GetFileNameWithoutExtension((Split-Path $repo -Leaf)))
+    $repoLeaf = Split-Path -Path $repo -Leaf
+    $repoName = [IO.Path]::GetFileNameWithoutExtension($repoLeaf)
+    $repoPath = Join-Path -Path (Join-Path -Path $WORKSPACE -ChildPath 'python') -ChildPath $repoName
     try {
         Write-Log -Level 'INFO' -Message "Post-init: Cloning setup repository to $repoPath"
-        if (Test-Path (Join-Path $repoPath '.git')) {
+        if (Test-Path (Join-Path -Path $repoPath -ChildPath '.git')) {
             Write-Log -Level 'INFO' -Message "Post-init: Repository exists; pulling latest changes"
             & git -C $repoPath pull --ff-only | Out-Null
         } else {
@@ -890,7 +892,7 @@ function Invoke-PostInit {
     } catch {
         Write-Log -Level 'WARN' -Message "Failed to clone/pull setup repository: $($_.Exception.Message)"
     }
-
+    
     # Run the Windows setup script using Python
     try {
         # Default PYTHON if not set
