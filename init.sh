@@ -332,6 +332,37 @@ install_python311() {
 
   case "$PM" in
     apt)
+      info "Adding deadsnakes PPA for Python 3.11..."
+      # Ensure repo management tools and update index
+      $SUDO apt-get update $YES_FLAG
+      set +e
+      $SUDO apt-get install -y software-properties-common
+      rc_pkg=$?
+      set -e
+      if [ $rc_pkg -ne 0 ]; then
+        warn "Failed to install software-properties-common; add-apt-repository may be missing."
+      fi
+
+      # Add PPA (idempotent) and refresh
+      set +e
+      $SUDO add-apt-repository -y ppa:deadsnakes/ppa
+      rc_add=$?
+      set -e
+      if [ $rc_add -ne 0 ]; then
+        warn "add-apt-repository failed (rc=$rc_add); proceeding to install python3.11."
+      fi
+
+      $SUDO apt-get update $YES_FLAG
+      info "Installing Python 3.11 via apt..."
+      set +e
+      $SUDO apt install -y python3.11
+      rc=$?
+      set -e
+      if [ $rc -ne 0 ]; then
+        die "$EC_PYTHON" "Failed to install python3.11 via apt (deadsnakes PPA)."
+      fi
+      ;;
+    dnf)
       # Try native packages
       set +e
       pm_install python3.11 python3.11-venv python3.11-distutils
@@ -340,13 +371,6 @@ install_python311() {
       if [ $rc -ne 0 ]; then
         die "$EC_PYTHON" "python3.11 not available via apt on this system."
       fi
-      ;;
-    dnf)
-      set +e
-      pm_install python3.11
-      rc=$?
-      set -e
-      [ $rc -ne 0 ] && die "$EC_PYTHON" "python3.11 not available via dnf on this system."
       ;;
     yum)
       set +e
@@ -385,7 +409,6 @@ install_python311() {
       PYTHON_BIN="python3"
       ;;
     brew)
-      // ... existing code ...
       set -e
       if [ $rc -ne 0 ]; then
         die "$EC_PYTHON" "python@3.11 install failed or unavailable via Homebrew."
@@ -599,15 +622,44 @@ install_git() {
 # 1Password (official)
 # -----------------------------
 install_1password_apt() {
-  $SUDO apt-get update
+  info "Configuring 1Password apt repository and installing CLI..."
+
+  arch="$(dpkg --print-architecture 2>/dev/null || echo amd64)"
+
+  # Archive keyring
+  set +e
+  curl -sS https://downloads.1password.com/linux/keys/1password.asc \
+    | $SUDO gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
+  rc_keyring=$?
+  set -e
+  if [ $rc_keyring -ne 0 ]; then
+    die "$EC_1PASSWORD" "Failed to create 1Password archive keyring."
+  fi
+
+  # Sources list
+  echo "deb [arch=$arch signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/$arch stable main" \
+    | $SUDO tee /etc/apt/sources.list.d/1password.list >/dev/null
+
+  # debsig policy + keyring
+  $SUDO mkdir -p /etc/debsig/policies/AC2D62742012EA22/
+  curl -sS https://downloads.1password.com/linux/debian/debsig/1password.pol \
+    | $SUDO tee /etc/debsig/policies/AC2D62742012EA22/1password.pol >/dev/null
+
+  $SUDO mkdir -p /usr/share/debsig/keyrings/AC2D62742012EA22
+  curl -sS https://downloads.1password.com/linux/keys/1password.asc \
+    | $SUDO gpg --dearmor --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg
+
+  # Install CLI
+  $SUDO apt update $YES_FLAG
   info "Installing 1Password CLI via apt..."
   set +e
-  $SUDO apt-get install $YES_FLAG 1password-cli
+  $SUDO apt install -y 1password-cli
   rc=$?
   set -e
   if [ $rc -ne 0 ]; then
     die "$EC_1PASSWORD" "Failed to install 1Password CLI via apt."
   fi
+
   info "1Password CLI installed: $(op --version)"
 }
 
