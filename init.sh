@@ -107,6 +107,14 @@ while [ $# -gt 0 ]; do
 done
 
 # -----------------------------
+# Pre-flight: require OP_SERVICE_ACCOUNT_TOKEN
+# -----------------------------
+if [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+  warn "OP_SERVICE_ACCOUNT_TOKEN is not set. Please export it before running this script."
+  exit 1
+fi
+
+# -----------------------------
 # Privilege handling
 # -----------------------------
 SUDO=""

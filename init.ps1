@@ -52,11 +52,14 @@ param(
     [switch]$Yes,
 
     [Alias('h')]
-    [switch]$Help
+    [switch]$Help,
+
+    [switch]$NoUpdate
 )
 # Map GNU-style args to PowerShell switches to preserve CLI behavior
 if ($args -contains '--yes') { $Yes = $true }
 if ($args -contains '--help' -or $args -contains '-h') { $Help = $true }
+if ($args -contains '--no-update') { $NoUpdate = $true }
 
 if ($Help) {
     Get-Help -Detailed
@@ -103,6 +106,14 @@ if (-not $OnWindows) {
     Die $EC_UNSUPPORTED 'Unsupported OS. This script targets Windows only.'
 }
 
+# Verify OP_SERVICE_ACCOUNT_TOKEN is set; warn and exit if missing
+$OPToken = $OP_SERVICE_ACCOUNT_TOKEN
+if (-not $OPToken) { $OPToken = $env:OP_SERVICE_ACCOUNT_TOKEN }
+if (-not $OPToken -or [string]::IsNullOrWhiteSpace($OPToken)) {
+    Write-Log -Level 'WARN' -Message 'OP_SERVICE_ACCOUNT_TOKEN is not set. Exiting.'
+    exit 0
+}
+
 # Elevation check
 try {
     $IsAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -137,6 +148,10 @@ if ($PM -eq 'none') {
 
 # PM helpers
 function Update-SystemPackages {
+    if ($NoUpdate) {
+        Write-Log -Level 'INFO' -Message "Skipping system package update (--no-update)."
+        return
+    }
     Write-Log -Level 'INFO' -Message "Updating packages via '$PM'..."
     try {
         switch ($PM) {
@@ -444,7 +459,11 @@ function Install-Git {
         return
     }
     Write-Log -Level 'INFO' -Message "Installing Git..."
-    Update-SystemPackages
+    if (-not $NoUpdate) {
+        Update-SystemPackages
+    } else {
+        Write-Log -Level 'INFO' -Message "Skipping system package update (--no-update flag)."
+    }
 
     $ok = $false
     switch ($PM) {
@@ -546,7 +565,11 @@ function Install-1Password {
     }
 
     Write-Log -Level 'INFO' -Message "Installing 1Password (desktop)..."
-    Update-SystemPackages
+    if (-not $NoUpdate) {
+        Update-SystemPackages
+    } else {
+        Write-Log -Level 'INFO' -Message "Skipping system package update (--no-update flag)."
+    }
 
     $ok = $false
     switch ($PM) {
@@ -592,7 +615,11 @@ function Install-1PasswordCLI {
     }
 
     Write-Log -Level 'INFO' -Message "Installing 1Password CLI..."
-    Update-SystemPackages
+    if (-not $NoUpdate) {
+        Update-SystemPackages
+    } else {
+        Write-Log -Level 'INFO' -Message "Skipping system package update (--no-update flag)."
+    }
 
     $ok = $false
     switch ($PM) {
@@ -942,7 +969,11 @@ function Install-Python311 {
     }
 
     Write-Log -Level 'INFO' -Message "Installing Python 3.11..."
-    Update-SystemPackages
+    if (-not $NoUpdate) {
+        Update-SystemPackages
+    } else {
+        Write-Log -Level 'INFO' -Message "Skipping system package update (--no-update flag)."
+    }
 
     $ok = $false
     switch ($PM) {
@@ -988,8 +1019,12 @@ if (-not (Test-Network)) {
     Write-Log -Level 'WARN' -Message "Network check failed or web requests blocked. Proceeding; downloads may fail."
 }
 
-Write-Log -Level 'INFO' -Message "Pre-flight: Updating system packages"
-Update-SystemPackages
+if (-not $NoUpdate) {
+    Write-Log -Level 'INFO' -Message "Pre-flight: Updating system packages"
+    Update-SystemPackages
+} else {
+    Write-Log -Level 'INFO' -Message "Pre-flight: Skipping system package update (--no-update flag)."
+}
 
 Write-Log -Level 'INFO' -Message "Step 1/4: Installing Python 3.11 + pip"
 Install-Python311
