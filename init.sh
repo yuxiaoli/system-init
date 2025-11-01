@@ -903,6 +903,11 @@ verify_completion
 # op item get xs3o5lfiqqs55qkeqz5jwji5iy --reveal --vault Service --format json --fields private_key | jq .value
 info "Post-init: Copying SSH private_key.value to ~/.ssh/id_ed25519"
 mkdir -p ~/.ssh
+# Ensure jq is available before parsing 1Password output (especially on macOS/Homebrew)
+if ! command -v jq >/dev/null 2>&1; then
+  info "Post-init: 'jq' not found; installing via detected package manager ($PM)"
+  require_cmd jq || die "$EC_UNSUPPORTED" "Failed to install 'jq'; it is required to parse 1Password JSON output."
+fi
 op item get xs3o5lfiqqs55qkeqz5jwji5iy --reveal --vault Service --format json --fields private_key | jq -r .ssh_formats.openssh.value > ~/.ssh/id_ed25519
 chmod 600 ~/.ssh/id_ed25519
 
