@@ -1026,7 +1026,7 @@ if [ -z "$OS" ]; then
   esac
 fi
 
-case "${OS,,}" in
+case "$(printf "%s" "$OS" | tr '[:upper:]' '[:lower:]')" in
   windows) setup_script="windows_init.py" ;;
   macos)   setup_script="macos_init.py" ;;
   linux)   setup_script="linux_init.py" ;;
