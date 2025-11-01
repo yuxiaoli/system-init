@@ -933,12 +933,16 @@ fi
 chmod 600 "$SSH_CONFIG"
 
 # Clone the setup repository (or pull if it already exists)
-info "Post-init: Cloning setup repository to $WORKSPACE/python"
-if [ -d "$WORKSPACE/python/.git" ]; then
+repo_url="git@github.com:yuxiaoli/app-manager.git"
+repo_name="$(basename "$repo_url" .git)"
+repo_path="$WORKSPACE/python/$repo_name"
+info "Post-init: Cloning setup repository to $repo_path"
+if [ -d "$repo_path/.git" ]; then
   info "Post-init: Repository exists; pulling latest changes"
-  git -C "$WORKSPACE/python" pull --ff-only
+  git -C "$repo_path" pull --ff-only
 else
-  git clone git@github.com:yuxiaoli/app-manager.git "$WORKSPACE/python"
+  # git clone git@github.com:yuxiaoli/app-manager.git "$WORKSPACE/python"
+  git clone "$repo_url" "$repo_path"
 fi
 
 # Run the setup script corresponding to the detected OS using $PYTHON

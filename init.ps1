@@ -877,8 +877,9 @@ function Invoke-PostInit {
     Ensure-GithubSSHNoHostKeyCheck
 
     # Clone the setup repository (or pull if it already exists)
+    $repo = "git@github.com:yuxiaoli/app-manager.git"
+    $repoPath = Join-Path $WORKSPACE 'python' ([IO.Path]::GetFileNameWithoutExtension((Split-Path $repo -Leaf)))
     try {
-        $repoPath = Join-Path $WORKSPACE 'python'
         Write-Log -Level 'INFO' -Message "Post-init: Cloning setup repository to $repoPath"
         if (Test-Path (Join-Path $repoPath '.git')) {
             Write-Log -Level 'INFO' -Message "Post-init: Repository exists; pulling latest changes"
