@@ -984,7 +984,7 @@ case "${OS,,}" in
     ;;
 esac
 
-cd "$WORKSPACE/python/scripts" || cd "$WORKSPACE/python" || exit 1
+cd "$repo_path/scripts" || cd "$repo_path" || exit 1
 info "Post-init: Running setup script $setup_script"
 $SUDO "$PYTHON" "$setup_script"
 
