@@ -1022,6 +1022,33 @@ if ! awk 'BEGIN{in=0; has=0} /^[[:space:]]*Host[[:space:]]+github\.com([[:space:
 fi
 chmod 600 "$SSH_CONFIG"
 
+# Mirror the SSH config override for root's home as well
+if [ -z "${ROOT_HOME:-}" ]; then
+  if [ "$(id -u)" -eq 0 ]; then
+    ROOT_HOME="$HOME"
+  else
+    if command -v getent >/dev/null 2>&1; then
+      ROOT_HOME="$(getent passwd root | awk -F: '{print $6}')"
+    fi
+    if [ -z "${ROOT_HOME:-}" ]; then
+      if [ "$OS" = "Darwin" ]; then
+        ROOT_HOME="/var/root"
+      else
+        ROOT_HOME="/root"
+      fi
+    fi
+  fi
+fi
+
+ROOT_SSH_CONFIG="$ROOT_HOME/.ssh/config"
+$SUDO mkdir -p "$ROOT_HOME/.ssh"
+$SUDO touch "$ROOT_SSH_CONFIG"
+if ! awk 'BEGIN{in=0; has=0} /^[[:space:]]*Host[[:space:]]+github\.com([[:space:]]|$)/{in=1; next} /^[[:space:]]*Host[[:space:]]+/{in=0} in && /^[[:space:]]*StrictHostKeyChecking[[:space:]]+no/{has=1} END{exit(has?0:1)}' "$ROOT_SSH_CONFIG"; then
+  info "Post-init: Adding override for github.com in root SSH config"
+  $SUDO sh -c "printf '%s\n%s\n' 'Host github.com' '     StrictHostKeyChecking no' >> \"$ROOT_SSH_CONFIG\""
+fi
+$SUDO chmod 600 "$ROOT_SSH_CONFIG"
+
 # Clone the setup repository (or pull if it already exists)
 repo_url="git@github.com:yuxiaoli/app-manager.git"
 repo_name="$(basename "$repo_url" .git)"
