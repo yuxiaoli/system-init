@@ -922,37 +922,41 @@ function Invoke-PostInit {
     
     # Run the Windows setup script using Python
     try {
-        $PYTHON = Get-Python311Exe
-        if (-not $PYTHON) {
-            Write-Log -Level 'WARN' -Message 'Python 3.11 interpreter not found.'
-            exit 1
-        }
-
-        $version_out = & $PYTHON --version 2>$null
-        if ($version_out -notmatch '^Python 3\.11') {
-            Write-Log -Level 'WARN' -Message ("Detected Python is not 3.11 (got: {0})." -f $version_out)
-            exit 1
-        }
-
+        # Resolve setup script path
         $scriptsDir = Join-Path $repoPath 'scripts'
         $setupDir = if (Test-Path $scriptsDir) { $scriptsDir } else { $repoPath }
         $setupScript = Join-Path $setupDir 'windows_init.py'
 
-        $PIP = "$PYTHON -m pip"
-        Write-Host $PYTHON
-        Write-Host $PIP
-        Write-Host ('"' + $PYTHON + ' ' + $setupScript + '"')
-
         if (Test-Path $setupScript -PathType Leaf -ErrorAction SilentlyContinue) {
             Write-Log -Level 'INFO' -Message "Post-init: Running setup script windows_init.py"
+
+            # Prefer absolute Python 3.11 path
+            $PYTHON = Get-Python311Exe
+            if (-not $PYTHON) {
+                Write-Log -Level 'WARN' -Message "Python 3.11 interpreter not found or unresolved."
+                exit 1
+            }
+
+            $version_out = (& $PYTHON --version 2>$null)
+            if ($version_out -notmatch '^Python 3\.11') {
+                Write-Log -Level 'WARN' -Message "Detected Python is not 3.11 (got: $version_out)."
+                exit 1
+            }
+
+            $PIP = "$PYTHON -m pip"
+            $env:PYTHON = $PYTHON
+            $env:PIP = $PIP
+
+            Write-Host $PYTHON
+            Write-Host $PIP
+            Write-Host ("{0} {1}" -f $PYTHON, $setupScript)
+
             & $PYTHON $setupScript
         } else {
             Write-Log -Level 'WARN' -Message "Setup script not found at $setupScript"
-            exit 1
         }
     } catch {
-        Write-Log -Level 'WARN' -Message ("Failed to run setup script: {0}" -f $_.Exception.Message)
-        exit 1
+        Write-Log -Level 'WARN' -Message "Failed to run setup script: $($_.Exception.Message)"
     }
 
     Write-Log -Level 'INFO' -Message "Post-init verification complete. If new tools were added to PATH, restart your shell."

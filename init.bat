@@ -638,35 +638,48 @@ if errorlevel 1 (
 )
 
 :: Run Windows setup script using Python
-set "PY_CMD="
-where python >nul 2>&1 && set "PY_CMD=python"
-if "%PY_CMD%"=="" where py >nul 2>&1 && set "PY_CMD=py"
-if "%PY_CMD%"=="" where python3 >nul 2>&1 && set "PY_CMD=python3"
-if "%PY_CMD%"=="" (
-    call :log WARN "No Python interpreter found in PATH; skipping setup script run."
-) else (
-    :InvokePostInit
-    set "PYTHON=%PY311%"
-    set "SETUP_DIR=%REPO_PATH%"
-    set "SETUP_SCRIPT=%SETUP_DIR%\windows_init.py"
-    for /f "usebackq delims=" %%V in (`"%PYTHON%" --version 2^>nul`) do (
-        echo %%V | findstr /R "^Python 3\.11" >nul || (
-            call :log WARN "Detected Python is not 3.11 (got: %%V)."
-            exit /b 1
+:InvokePostInit
+    set "PY_CMD="
+    where python >nul 2>&1 && set "PY_CMD=python"
+    if "%PY_CMD%"=="" where py >nul 2>&1 && set "PY_CMD=py"
+    if "%PY_CMD%"=="" where python3 >nul 2>&1 && set "PY_CMD=python3"
+    if "%PY_CMD%"=="" (
+        call :log WARN "No Python interpreter found in PATH; skipping setup script run."
+    ) else (
+        set "SETUP_DIR=%REPO_PATH%"
+        set "SETUP_SCRIPT=%SETUP_DIR%\windows_init.py"
+        if exist "%SETUP_SCRIPT%" (
+            call :log INFO "Post-init: Running setup script windows_init.py"
+    
+            rem Prefer absolute Python 3.11 path
+            call :GetPython311Exe
+            if defined PY311 (
+                set "PYTHON=%PY311%"
+            ) else (
+                for /f "usebackq delims=" %%X in (`where %PY_CMD% 2^>nul`) do set "PYTHON=%%X"
+            )
+            if not defined PYTHON (
+                call :log WARN "Python executable not resolved."
+                exit /b 1
+            )
+    
+            for /f "usebackq delims=" %%V in (`"%PYTHON%" --version 2^>nul`) do set "VERSION_OUT=%%V"
+            echo %VERSION_OUT% | findstr /R /C:"^Python 3\.11" >nul
+            if errorlevel 1 (
+                call :log WARN "Detected Python is not 3.11 (got: %VERSION_OUT%)."
+                exit /b 1
+            )
+    
+            set "PIP=%PYTHON% -m pip"
+            echo %PYTHON%
+            echo %PIP%
+            echo %PYTHON% %SETUP_SCRIPT%
+    
+            "%PYTHON%" "%SETUP_SCRIPT%"
+        ) else (
+            call :log WARN "Setup script not found at %SETUP_SCRIPT%"
         )
     )
-    set "PIP=%PYTHON% -m pip"
-    echo %PYTHON%
-    echo %PIP%
-    echo "%PYTHON% %SETUP_SCRIPT%"
-    if exist "%SETUP_SCRIPT%" (
-        call :log INFO "Post-init: Running setup script windows_init.py"
-        "%PYTHON%" "%SETUP_SCRIPT%"
-    ) else (
-        call :log WARN "Setup script not found at %SETUP_SCRIPT%"
-        exit /b 1
-    )
-)
 
 call :log INFO "Post-init verification complete. If new tools were added to PATH, restart your shell."
 exit /b 0
