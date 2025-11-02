@@ -1129,6 +1129,7 @@ case "$version_out" in
 
 esac
 PIP="$PYTHON -m pip"
+export PYTHON PIP
 printf '%s\n' "$PYTHON" "$PIP" "$PYTHON $setup_script"
 "$PYTHON" "$setup_script"
 
