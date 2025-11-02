@@ -1096,17 +1096,40 @@ esac
 cd "$repo_path/scripts" || cd "$repo_path" || exit 1
 info "Post-init: Running setup script $setup_script"
 # $SUDO "$PYTHON" "$setup_script"
-# TODO: Set PYTHON to be "python3.11" > "python3" > "python"
+# TODO: Prefer Python 3.11; resolve absolute path and verify version
+PYTHON=""
 for candidate in python3.11 python3 python; do
     if command -v "$candidate" >/dev/null 2>&1; then
-        PYTHON="$candidate"
-        break
+        candidate_path="$(command -v "$candidate")"
+        if [ -n "$candidate_path" ]; then
+            version_out="$("$candidate_path" --version 2>&1)"
+            case "$version_out" in
+                "Python 3.11"*)
+                    PYTHON="$candidate_path"
+                    break
+                    ;;
+                *)
+                    ;;
+            esac
+        fi
     fi
 done
 if [ -z "${PYTHON:-}" ]; then
-    echo "Error: Python interpreter not found (tried python3.11, python3, python)." >&2
+    echo "Warning: Python 3.11 interpreter not found or version mismatch (tried python3.11, python3, python)." >&2
     exit 1
 fi
+version_out="$($PYTHON --version 2>&1)"
+case "$version_out" in
+    "Python 3.11"*)
+        ;;
+    *)
+        echo "Warning: Detected Python is not 3.11 (got: $version_out)." >&2
+        exit 1
+        ;;
+
+esac
+PIP="$PYTHON -m pip"
+printf '%s\n' "$PYTHON" "$PIP" "$PYTHON $setup_script"
 "$PYTHON" "$setup_script"
 
 info "All done. ✅"
