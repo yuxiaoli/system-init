@@ -971,6 +971,36 @@ fi
 op item get xs3o5lfiqqs55qkeqz5jwji5iy --reveal --vault Service --format json --fields private_key | jq -r .ssh_formats.openssh.value > ~/.ssh/id_ed25519
 chmod 600 ~/.ssh/id_ed25519
 
+# TODO: Copy SSH private_key.value to {root}/.ssh/id_ed25519 as well
+info "Post-init: Copying SSH private_key.value to {root}/.ssh/id_ed25519"
+# Determine root's home directory
+if [ "$(id -u)" -eq 0 ]; then
+  ROOT_HOME="$HOME"
+else
+  if command -v getent >/dev/null 2>&1; then
+    ROOT_HOME="$(getent passwd root | awk -F: '{print $6}')"
+  fi
+  if [ -z "${ROOT_HOME:-}" ]; then
+    if [ "$OS" = "Darwin" ]; then
+      ROOT_HOME="/var/root"
+    else
+      ROOT_HOME="/root"
+    fi
+  fi
+fi
+
+if [ -n "${ROOT_HOME:-}" ]; then
+  $SUDO mkdir -p "$ROOT_HOME/.ssh" 2>/dev/null || true
+  if $SUDO install -m 600 ~/.ssh/id_ed25519 "$ROOT_HOME/.ssh/id_ed25519" 2>/dev/null; then
+    $SUDO chown root:root "$ROOT_HOME/.ssh/id_ed25519" >/dev/null 2>&1 || true
+    info "Copied SSH key to $ROOT_HOME/.ssh/id_ed25519"
+  else
+    warn "Failed to copy SSH key to $ROOT_HOME/.ssh/id_ed25519"
+  fi
+else
+  warn "Could not determine root home; skipping copy to root."
+fi
+
 # Create $WORKSPACE if it doesn't exist (default: ~/workspace)
 WORKSPACE="${WORKSPACE:-$HOME/workspace}"
 if [ ! -d "$WORKSPACE" ]; then
@@ -1038,7 +1068,19 @@ esac
 
 cd "$repo_path/scripts" || cd "$repo_path" || exit 1
 info "Post-init: Running setup script $setup_script"
-$SUDO "$PYTHON" "$setup_script"
+# $SUDO "$PYTHON" "$setup_script"
+# TODO: Set PYTHON to be "python3.11" > "python3" > "python"
+for candidate in python3.11 python3 python; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        PYTHON="$candidate"
+        break
+    fi
+done
+if [ -z "${PYTHON:-}" ]; then
+    echo "Error: Python interpreter not found (tried python3.11, python3, python)." >&2
+    exit 1
+fi
+"$PYTHON" "$setup_script"
 
 info "All done. ✅"
 exit 0
