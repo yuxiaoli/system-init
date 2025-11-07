@@ -9,7 +9,7 @@ Use sudo
 ```sh
 curl -sS https://raw.githubusercontent.com/yuxiaoli/system-init/main/init.sh | sudo -E sh
 ```
-`-E/--preserve-env`: Preserve your current environment variables
+`-E/--preserve-env`: Preserve current environment variables
 
 Windows
 Powershell
