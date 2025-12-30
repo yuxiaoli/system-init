@@ -1,0 +1,1 @@
+Update #file:init.sh, #file:init.ps1 and #file:init.bat based off of #file:docs/init.md

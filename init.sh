@@ -320,6 +320,26 @@ set_python3_default_to_311() {
   fi
 }
 
+install_uv() {
+  if command -v uv >/dev/null 2>&1; then
+    info "uv already installed: $(uv --version)"
+    return 0
+  fi
+
+  info "Installing uv package manager..."
+  # Install uv using the official script
+  if curl -LsSf https://astral.sh/uv/install.sh | sh; then
+    # Update PATH for current session (default install locations)
+    export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+    if command -v uv >/dev/null 2>&1; then
+      info "uv installed successfully: $(uv --version)"
+      return 0
+    fi
+  fi
+  warn "uv installation failed or not found in PATH. Proceeding without uv."
+  return 1
+}
+
 install_python311() {
   if command -v "$PYTHON_BIN" >/dev/null 2>&1; then
     info "Python 3.11 already installed: $("$PYTHON_BIN" --version 2>/dev/null || echo 'unknown version')"
@@ -327,7 +347,26 @@ install_python311() {
     return 0
   fi
 
-  info "Installing Python 3.11..."
+  # Try to install via uv first
+  if install_uv; then
+    info "Installing Python 3.11 via uv..."
+    if uv python install 3.11; then
+      uv_python_path="$(uv python find 3.11 2>/dev/null)"
+      if [ -n "$uv_python_path" ] && [ -x "$uv_python_path" ]; then
+        info "Python 3.11 installed via uv at $uv_python_path"
+        PYTHON_BIN="$uv_python_path"
+        ensure_pip311
+        set_python3_default_to_311
+        return 0
+      else
+        warn "uv python install succeeded but binary not found."
+      fi
+    else
+      warn "uv python install failed."
+    fi
+  fi
+
+  info "Falling back to system package manager for Python 3.11..."
   pm_update
 
   case "$PM" in

@@ -965,6 +965,46 @@ function Invoke-PostInit {
 # -----------------------------
 # Installers
 # -----------------------------
+function Install-Uv {
+    if (Get-Command uv -ErrorAction SilentlyContinue) {
+        Write-Log -Level 'INFO' -Message ("uv already installed: " + (& uv --version))
+        return $true
+    }
+
+    Write-Log -Level 'INFO' -Message "Installing uv package manager..."
+    try {
+        # Install uv
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://astral.sh/uv/install.ps1 | iex" | Out-Null
+        
+        # Refresh environment to find uv
+        Refresh-Environment
+        
+        if (Get-Command uv -ErrorAction SilentlyContinue) {
+            Write-Log -Level 'INFO' -Message ("uv installed successfully: " + (& uv --version))
+            return $true
+        }
+        
+        # Fallback check for common install paths if PATH update failed in session
+        $paths = @(
+            "$env:LOCALAPPDATA\bin\uv.exe",
+            "$env:USERPROFILE\.cargo\bin\uv.exe"
+        )
+        foreach ($p in $paths) {
+            if (Test-Path $p) {
+                $env:Path = "$(Split-Path $p);$env:Path"
+                Write-Log -Level 'INFO' -Message "uv found at $p, added to PATH."
+                return $true
+            }
+        }
+        
+        Write-Log -Level 'WARN' -Message "uv installed but not found in PATH."
+        return $false
+    } catch {
+        Write-Log -Level 'WARN' -Message "uv installation failed: $($_.Exception.Message)"
+        return $false
+    }
+}
+
 function Install-Python311 {
     $existing = Get-Python311Exe
     if ($existing) {
@@ -975,7 +1015,31 @@ function Install-Python311 {
         return
     }
 
-    Write-Log -Level 'INFO' -Message "Installing Python 3.11..."
+    # Try uv first
+    if (Install-Uv) {
+        Write-Log -Level 'INFO' -Message "Installing Python 3.11 via uv..."
+        try {
+            uv python install 3.11
+            if ($LASTEXITCODE -eq 0) {
+                 $uvPy = (uv python find 3.11 2>$null)
+                 if ($uvPy -and (Test-Path $uvPy)) {
+                      Write-Log -Level 'INFO' -Message "Python 3.11 installed via uv at $uvPy"
+                      Ensure-Pip311 -Python311Exe $uvPy
+                      Set-PyLauncherDefaultTo311
+                      Add-Python3Shim -Python311Exe $uvPy
+                      return
+                 } else {
+                      Write-Log -Level 'WARN' -Message "uv python install succeeded but binary not found."
+                 }
+            } else {
+                 Write-Log -Level 'WARN' -Message "uv python install failed."
+            }
+        } catch {
+            Write-Log -Level 'WARN' -Message "uv python install encountered an error: $($_.Exception.Message)"
+        }
+    }
+
+    Write-Log -Level 'INFO' -Message "Falling back to system package manager for Python 3.11..."
     if (-not $NoUpdate) {
         Update-SystemPackages
     } else {

@@ -687,6 +687,44 @@ exit /b 0
 :: -----------------------------
 :: Python installer
 :: -----------------------------
+:InstallUv
+where uv >nul 2>&1
+if not errorlevel 1 (
+    for /f "usebackq delims=" %%V in (`uv --version 2^>nul`) do call :log INFO "uv already installed: %%V"
+    exit /b 0
+)
+
+call :log INFO "Installing uv package manager..."
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://astral.sh/uv/install.ps1 | iex"
+if errorlevel 1 (
+    call :log WARN "uv installation failed."
+    exit /b 1
+)
+
+:: Refresh path attempt
+call :RefreshEnvironment
+
+where uv >nul 2>&1
+if not errorlevel 1 (
+     for /f "usebackq delims=" %%V in (`uv --version 2^>nul`) do call :log INFO "uv installed: %%V"
+     exit /b 0
+)
+
+:: Manual path check and add to current session PATH
+if exist "%LOCALAPPDATA%\bin\uv.exe" (
+    set "PATH=%LOCALAPPDATA%\bin;%PATH%"
+    call :log INFO "uv found at %LOCALAPPDATA%\bin\uv.exe, added to PATH."
+    exit /b 0
+)
+if exist "%USERPROFILE%\.cargo\bin\uv.exe" (
+    set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
+    call :log INFO "uv found at %USERPROFILE%\.cargo\bin\uv.exe, added to PATH."
+    exit /b 0
+)
+
+call :log WARN "uv installed but not found in PATH."
+exit /b 1
+
 :InstallPython311
 call :GetPython311Exe
 if defined PY311 (
@@ -697,6 +735,35 @@ if defined PY311 (
     exit /b 0
 )
 
+:: Try uv first
+call :InstallUv
+if not errorlevel 1 (
+    call :log INFO "Installing Python 3.11 via uv..."
+    uv python install 3.11
+    if not errorlevel 1 (
+        set "UV_PY="
+        for /f "usebackq delims=" %%P in (`uv python find 3.11 2^>nul`) do set "UV_PY=%%P"
+        if defined UV_PY (
+            if exist "!UV_PY!" (
+                call :log INFO "Python 3.11 installed via uv at !UV_PY!"
+                call :EnsurePip311 "!UV_PY!"
+                call :SetPyLauncherDefaultTo311
+                call :AddPython3Shim "!UV_PY!"
+                exit /b 0
+            ) else (
+                call :log WARN "uv python find returned !UV_PY! but file does not exist."
+            )
+        ) else (
+             call :log WARN "uv python find 3.11 failed to return a path."
+        )
+    ) else (
+        call :log WARN "uv python install failed."
+    )
+) else (
+    call :log WARN "uv installation or detection failed; skipping uv python install."
+)
+
+call :log INFO "Falling back to system package manager for Python 3.11..."
 call :log INFO "Installing Python 3.11..."
 if "%NOUPDATE%"=="0" (
     call :UpdateSystemPackages
