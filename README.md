@@ -14,12 +14,17 @@ curl -sS https://raw.githubusercontent.com/yuxiaoli/system-init/main/init.sh | s
 Windows
 Powershell
 ```powershell
-iex (iwr "https://raw.githubusercontent.com/yuxiaoli/system-init/refs/heads/main/init.bat" -UseBasicParsing).Content
+iex (iwr "https://raw.githubusercontent.com/yuxiaoli/system-init/main/init.ps1" -UseBasicParsing).Content
 ```
 ```powershell
 (iwr "https://raw.githubusercontent.com/yuxiaoli/system-init/main/init.ps1" -UseBasicParsing).Content > init.ps1; .\init.ps1 -Yes -NoUpdate
 ```
 Run as administrator
+> **Why?** Administrator privileges are required to:
+> * Update system-wide packages (via Chocolatey or Winget).
+> * Configure system-level Python defaults (`%ProgramData%\py.ini`).
+> * Ensure environment variable changes are broadcast successfully.
+
 ```powershell
 Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command','(iwr "https://raw.githubusercontent.com/yuxiaoli/system-init/main/init.ps1" -UseBasicParsing).Content > init.ps1; & .\init.ps1 -Yes -NoUpdate'
 ```

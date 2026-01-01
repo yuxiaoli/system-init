@@ -22,9 +22,13 @@ This document summarizes the workflow of `init.bat`, `init.ps1`, and `init.sh`. 
 4.  **Core Tools Installation**
     *   **Git**: Install latest stable version.
     *   **1Password**: Install Desktop application and CLI (`op`).
-
-5.  **Post-Initialization**
-    *   **SSH Setup**: 
+25→
+26→5.  **Validation**
+27→    *   **Verification**: The script verifies that all installed components (Python, Pip, Git, 1Password CLI, `uv`) are correctly installed and accessible in the PATH.
+28→    *   **uv Check**: Explicitly verifies `uv run -- python --version` to ensure the `uv` environment is functional.
+29→
+30→6.  **Post-Initialization**
+31→    *   **SSH Setup**: 
         *   Retrieve private key from 1Password (Vault: Service, Item ID: `xs3o5lfiqqs55qkeqz5jwji5iy`).
         *   Save to `~/.ssh/id_ed25519` with secure permissions (600).
         *   Configure `~/.ssh/config` to disable `StrictHostKeyChecking` for `github.com`.
