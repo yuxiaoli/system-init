@@ -547,6 +547,18 @@ function Get-OpExe {
     return $null
 }
 
+function Get-UvExe {
+    if (Get-Command uv -ErrorAction SilentlyContinue) { return 'uv' }
+    $paths = @(
+        "$env:LOCALAPPDATA\bin\uv.exe",
+        "$env:USERPROFILE\.cargo\bin\uv.exe"
+    )
+    foreach ($p in $paths) {
+        if (Test-Path $p) { return $p }
+    }
+    return $null
+}
+
 function Test-1PasswordInstalled {
     # 1Password desktop app typical paths
     $paths = @(
@@ -730,6 +742,27 @@ function Invoke-PostInit {
 
     # Ensure a convenient refresh helper exists for future sessions
     Ensure-RefreshEnvAlias
+
+    # Verify uv and 'uv run'
+    try {
+        $uvExe = Get-UvExe
+        if ($uvExe) {
+            $uvVer = (& $uvExe --version 2>&1)
+            Write-Log -Level 'INFO' -Message ("uv detected: $uvVer")
+            
+            Write-Log -Level 'INFO' -Message "Verifying 'uv run -- python --version'..."
+            $uvPyVer = (& $uvExe run -- python --version 2>&1) | Out-String
+            if ($LASTEXITCODE -eq 0) {
+                Write-Log -Level 'INFO' -Message ("uv run python check passed: " + $uvPyVer.Trim())
+            } else {
+                Write-Log -Level 'WARN' -Message "uv run python check failed."
+            }
+        } else {
+            Write-Log -Level 'WARN' -Message "uv not detected."
+        }
+    } catch {
+        Write-Log -Level 'WARN' -Message "uv verification failed: $($_.Exception.Message)"
+    }
 
     # Verify Python 3.11 and pip
     try {
