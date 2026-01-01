@@ -687,15 +687,24 @@ exit /b 0
 :: -----------------------------
 :: Python installer
 :: -----------------------------
+:GetUvExe
+set "UVEXE="
+where uv >nul 2>&1 && set "UVEXE=uv"
+if defined UVEXE exit /b 0
+if exist "%LOCALAPPDATA%\bin\uv.exe" set "UVEXE=%LOCALAPPDATA%\bin\uv.exe" & exit /b 0
+if exist "%USERPROFILE%\.cargo\bin\uv.exe" set "UVEXE=%USERPROFILE%\.cargo\bin\uv.exe" & exit /b 0
+exit /b 0
+
 :InstallUv
-where uv >nul 2>&1
-if not errorlevel 1 (
-    for /f "usebackq delims=" %%V in (`uv --version 2^>nul`) do call :log INFO "uv already installed: %%V"
+call :GetUvExe
+if defined UVEXE (
+    for /f "usebackq delims=" %%V in (`"%UVEXE%" --version 2^>nul`) do call :log INFO "uv already installed: %%V"
     exit /b 0
 )
 
 call :log INFO "Installing uv package manager..."
-powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://astral.sh/uv/install.ps1 | iex"
+set "INSTALL_SCRIPT=%TEMP%\install-uv.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri 'https://astral.sh/uv/install.ps1' -OutFile '%INSTALL_SCRIPT%'; & '%INSTALL_SCRIPT%'; Remove-Item '%INSTALL_SCRIPT%' -ErrorAction SilentlyContinue"
 if errorlevel 1 (
     call :log WARN "uv installation failed."
     exit /b 1
@@ -704,9 +713,9 @@ if errorlevel 1 (
 :: Refresh path attempt
 call :RefreshEnvironment
 
-where uv >nul 2>&1
-if not errorlevel 1 (
-     for /f "usebackq delims=" %%V in (`uv --version 2^>nul`) do call :log INFO "uv installed: %%V"
+call :GetUvExe
+if defined UVEXE (
+     for /f "usebackq delims=" %%V in (`"%UVEXE%" --version 2^>nul`) do call :log INFO "uv installed: %%V"
      exit /b 0
 )
 
@@ -844,6 +853,22 @@ if not errorlevel 1 (
     ) else (
         call :log WARN "1Password CLI ('op') not detected."
     )
+)
+
+:: Verify uv and 'uv run'
+call :GetUvExe
+if defined UVEXE (
+    for /f "usebackq delims=" %%V in (`"%UVEXE%" --version 2^>nul`) do call :log INFO "uv detected: %%V"
+    call :log INFO "Verifying 'uv run -- python --version'..."
+    "%UVEXE%" run -- python --version >"%TEMP%\_uv_py.txt" 2>&1
+    if not errorlevel 1 (
+        for /f "usebackq delims=" %%V in ("%TEMP%\_uv_py.txt") do call :log INFO "uv run python check passed: %%V"
+    ) else (
+        call :log WARN "uv run python check failed."
+    )
+    del /q "%TEMP%\_uv_py.txt" >nul 2>&1
+) else (
+    call :log WARN "uv not detected."
 )
 exit /b 0
 

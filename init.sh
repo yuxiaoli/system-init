@@ -840,6 +840,20 @@ verify_completion() {
     return 1
   fi
   info "1Password OK."
+
+  # uv
+  if command -v uv >/dev/null 2>&1; then
+    info "uv detected: $(uv --version)"
+    info "Verifying 'uv run -- python --version'..."
+    if uv_py_ver="$(uv run -- python --version 2>&1)"; then
+       info "uv run python check passed: $(echo "$uv_py_ver" | head -n 1)"
+    else
+       warn "uv run python check failed."
+    fi
+  else
+    warn "uv not detected."
+  fi
+
   info "Verification complete."
 }
 
