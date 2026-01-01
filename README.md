@@ -14,10 +14,10 @@ curl -sS https://raw.githubusercontent.com/yuxiaoli/system-init/main/init.sh | s
 Windows
 Powershell
 ```powershell
-iex (iwr "https://raw.githubusercontent.com/yuxiaoli/system-init/main/init.ps1" -UseBasicParsing).Content
+$d="$USERPROFILE\temp"; if (!(Test-Path $d)) { mkdir $d }; iwr "https://raw.githubusercontent.com/yuxiaoli/system-init/main/init.ps1" -UseBasicParsing -OutFile "$d\init.ps1"; & "$d\init.ps1"
 ```
 ```powershell
-(iwr "https://raw.githubusercontent.com/yuxiaoli/system-init/main/init.ps1" -UseBasicParsing).Content > init.ps1; .\init.ps1 -Yes -NoUpdate
+$d="$USERPROFILE\temp"; if (!(Test-Path $d)) { mkdir $d }; iwr "https://raw.githubusercontent.com/yuxiaoli/system-init/main/init.ps1" -UseBasicParsing -OutFile "$d\init.ps1"; & "$d\init.ps1" -Yes -NoUpdate
 ```
 Run as administrator
 > **Why?** Administrator privileges are required to:
