@@ -14,7 +14,7 @@ This document summarizes the workflow of `init.bat`, `init.ps1`, and `init.sh`. 
     *   Upgrade existing system packages (skippable via `--no-update`).
 
 3.  **Python 3.11 Environment**
-    *   **uv**: Install `uv` (fast Python package installer) via package manager or official script.
+    *   **uv**: Install `uv` (fast Python package installer) via package manager or official script. Refer to [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/).
     *   **Python**: Install Python 3.11 (preferring `uv python install 3.11`, falling back to system packages).
     *   **Pip**: Ensure `pip` is installed and upgraded for Python 3.11.
     *   **Configuration (Windows)**: Set `py` launcher default to 3.11 and create a `python3` shim/alias.
