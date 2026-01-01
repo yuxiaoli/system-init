@@ -982,7 +982,10 @@ function Install-Uv {
     Write-Log -Level 'INFO' -Message "Installing uv package manager..."
     try {
         # Install uv
-        powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://astral.sh/uv/install.ps1 | iex" | Out-Null
+        $installScript = Join-Path $env:TEMP "install-uv.ps1"
+        Invoke-WebRequest -Uri "https://astral.sh/uv/install.ps1" -OutFile $installScript
+        powershell -NoProfile -ExecutionPolicy Bypass -File $installScript | Out-Null
+        Remove-Item $installScript -ErrorAction SilentlyContinue
         
         # Refresh environment to find uv
         Refresh-Environment
@@ -1105,16 +1108,19 @@ if (-not $NoUpdate) {
     Write-Log -Level 'INFO' -Message "Pre-flight: Skipping system package update (--no-update flag)."
 }
 
-Write-Log -Level 'INFO' -Message "Step 1/4: Installing Python 3.11 + pip"
+Write-Log -Level 'INFO' -Message "Step 1/5: Installing uv"
+Install-Uv
+
+Write-Log -Level 'INFO' -Message "Step 2/5: Installing Python 3.11 + pip"
 Install-Python311
 
-Write-Log -Level 'INFO' -Message "Step 2/4: Installing Git"
+Write-Log -Level 'INFO' -Message "Step 3/5: Installing Git"
 Install-Git
 
-Write-Log -Level 'INFO' -Message "Step 3/4: Installing 1Password (Desktop)"
+Write-Log -Level 'INFO' -Message "Step 4/5: Installing 1Password (Desktop)"
 Install-1Password
 
-Write-Log -Level 'INFO' -Message "Step 4/4: Installing 1Password CLI"
+Write-Log -Level 'INFO' -Message "Step 5/5: Installing 1Password CLI"
 Install-1PasswordCLI
 
 Write-Log -Level 'INFO' -Message "Post-init: Validating environment and configuration"
