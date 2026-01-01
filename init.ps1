@@ -532,6 +532,14 @@ function Get-OpExe {
     foreach ($p in $candidates) {
         if ($p -and (Test-Path $p)) { return $p }
     }
+    
+    # Check WinGet packages
+    $wingetPackages = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages"
+    if (Test-Path $wingetPackages) {
+        $op = Get-ChildItem -Path $wingetPackages -Recurse -Filter "op.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+        if ($op) { return $op }
+    }
+
     try {
         $cmd = Get-Command op -ErrorAction SilentlyContinue
         if ($cmd) { return $cmd.Source }
@@ -815,8 +823,8 @@ function Invoke-PostInit {
     # -------------------------------
     # Copy SSH private_key.value to ~/.ssh/id_ed25519 via 1Password CLI JSON
     try {
-        $opCmd = Get-Command op -ErrorAction SilentlyContinue
-        if ($opCmd) {
+        $opExe = Get-OpExe
+        if ($opExe) {
             Write-Log -Level 'INFO' -Message "Post-init: Copying SSH private_key.value to ~/.ssh/id_ed25519"
             $sshDir = Join-Path $env:USERPROFILE '.ssh'
             if (-not (Test-Path $sshDir)) {
@@ -824,7 +832,7 @@ function Invoke-PostInit {
             }
 
             $args = @('item','get','xs3o5lfiqqs55qkeqz5jwji5iy','--reveal','--vault','Service','--format','json','--fields','private_key')
-            $jsonText = & $opCmd.Source $args 2>$null
+            $jsonText = & $opExe $args 2>$null
             if ($jsonText) {
                 $obj = $null
                 try { $obj = $jsonText | ConvertFrom-Json } catch { $obj = $null }
